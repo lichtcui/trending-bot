@@ -42,16 +42,17 @@ fn main() -> Result<()> {
     };
 
     let (old, new) = cache.diff(&repos, &last_names);
+    let new_owned: Vec<repo::Repo> = new.into_iter().cloned().collect();
 
     // 3. 根据重复程度选择卡片类型
-    let card = if old.is_empty() && !new.is_empty() {
+    let card = if old.is_empty() && !new_owned.is_empty() {
         // 全部是新项目
         println!("📊 全部 {} 个项目均为新上榜", repos.len());
         format::format_card(&repos, CardVariant::Full)
-    } else if !new.is_empty() {
+    } else if !new_owned.is_empty() {
         // 部分新项目 — 只展示新项目
-        println!("📊 {} 个新项目，{} 个项目与上次相同", new.len(), old.len());
-        format::format_card(&new, CardVariant::Partial)
+        println!("📊 {} 个新项目，{} 个项目与上次相同", new_owned.len(), old.len());
+        format::format_card(&new_owned, CardVariant::Partial)
     } else {
         // 全部重复
         println!("📊 今日热门与昨日相同，无新项目");

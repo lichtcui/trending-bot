@@ -211,7 +211,7 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         let msg = format!("{}", err);
-        assert!(msg.contains("未解析到"), "错误信息应包含提示: {}", msg);
+        assert!(msg.contains("未从 Trending 页面解析到"), "错误信息应包含提示: {}", msg);
     }
 
     #[test]
