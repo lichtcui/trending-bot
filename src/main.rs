@@ -26,9 +26,11 @@ fn main() -> Result<()> {
         .and_then(|w| w[1].parse().ok())
         .unwrap_or(5);
 
-    // 从 macOS Keychain 读取飞书凭证
-    let (app_id, app_secret) = keychain::Keychain::get_app_credentials()
-        .unwrap_or_else(|_| ("".to_string(), "".to_string()));
+    // 从 macOS Keychain 读取飞书凭证（和 xhs-recipe 方式一致）
+    let app_id = keychain::Keychain::get_app_id()
+        .unwrap_or_default();
+    let app_secret = keychain::Keychain::get_app_secret()
+        .unwrap_or_default();
     let open_id = keychain::Keychain::get_open_id()
         .unwrap_or_default();
 
@@ -59,11 +61,12 @@ fn main() -> Result<()> {
     // 3. 飞书推送（除非 dry-run）
     if !dry_run {
         anyhow::ensure!(!app_id.is_empty() && !app_secret.is_empty(),
-            "缺少飞书凭证。请在 macOS Keychain 中添加:\n  \
-             名称: FEISHU_APP, 帐户: <你的 App ID>, 密码: <你的 App Secret>");
+            "缺少飞书凭证。请运行以下命令存入 Keychain:\n  \
+             security add-generic-password -a \"$USER\" -s FEISHU_APP_ID -w \"<App ID>\" -U\n  \
+             security add-generic-password -a \"$USER\" -s FEISHU_APP_SECRET -w \"<App Secret>\" -U");
         anyhow::ensure!(!open_id.is_empty(),
-            "缺少 FEISHU_OPEN_ID。请在 macOS Keychain 中添加:\n  \
-             名称: FEISHU_OPEN_ID, 帐户: <你的 open_id>, 密码: <你的 open_id>");
+            "缺少 FEISHU_OPEN_ID。请运行:\n  \
+             security add-generic-password -a \"$USER\" -s FEISHU_OPEN_ID -w \"<open_id>\" -U");
 
         let card = if all_new {
             format::format_card(&repos, CardVariant::Full)
