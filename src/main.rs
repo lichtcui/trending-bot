@@ -1,5 +1,6 @@
 mod cache;
 mod format;
+mod keychain;
 mod notify;
 mod output;
 mod repo;
@@ -20,6 +21,13 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let json_mode = args.contains(&"--json".to_string());
     let dry_run = args.contains(&"--dry-run".to_string());
+
+    // 从 macOS Keychain 读取飞书凭证
+    // 如果 Keychain 不可用，回退到环境变量
+    let (app_id, app_secret) = keychain::Keychain::get_app_credentials()
+        .unwrap_or_else(|_| ("".to_string(), "".to_string()));
+    let open_id = keychain::Keychain::get_open_id()
+        .unwrap_or_default();
 
     let count: usize = std::env::var("TRENDING_COUNT")
         .ok()
@@ -52,12 +60,12 @@ fn main() -> Result<()> {
 
     // 3. 飞书推送（除非 dry-run）
     if !dry_run {
-        let app_id = std::env::var("FEISHU_APP_ID")
-            .context("请设置 FEISHU_APP_ID 环境变量（飞书应用 App ID）")?;
-        let app_secret = std::env::var("FEISHU_APP_SECRET")
-            .context("请设置 FEISHU_APP_SECRET 环境变量（飞书应用 App Secret）")?;
-        let open_id = std::env::var("FEISHU_OPEN_ID")
-            .context("请设置 FEISHU_OPEN_ID 环境变量（你的用户 open_id）")?;
+        anyhow::ensure!(!app_id.is_empty() && !app_secret.is_empty(),
+            "缺少飞书凭证。请在 macOS Keychain 中添加:\n  \
+             名称: FEISHU_APP, 帐户: <你的 App ID>, 密码: <你的 App Secret>");
+        anyhow::ensure!(!open_id.is_empty(),
+            "缺少 FEISHU_OPEN_ID。请在 macOS Keychain 中添加:\n  \
+             名称: FEISHU_OPEN_ID, 帐户: <你的 open_id>, 密码: <你的 open_id>");
 
         let card = if all_new {
             format::format_card(&repos, CardVariant::Full)
