@@ -56,8 +56,8 @@ fn main() -> Result<()> {
             .context("请设置 FEISHU_APP_ID 环境变量（飞书应用 App ID）")?;
         let app_secret = std::env::var("FEISHU_APP_SECRET")
             .context("请设置 FEISHU_APP_SECRET 环境变量（飞书应用 App Secret）")?;
-        let chat_id = std::env::var("FEISHU_CHAT_ID")
-            .context("请设置 FEISHU_CHAT_ID 环境变量（目标群聊 ID，格式 oc_xxx）")?;
+        let open_id = std::env::var("FEISHU_OPEN_ID")
+            .context("请设置 FEISHU_OPEN_ID 环境变量（你的用户 open_id）")?;
 
         let card = if all_new {
             format::format_card(&repos, CardVariant::Full)
@@ -67,7 +67,7 @@ fn main() -> Result<()> {
             format::format_card(&[], CardVariant::Stale)
         };
 
-        let notifier = FeishuAppNotifier::new(&app_id, &app_secret, &chat_id);
+        let notifier = FeishuAppNotifier::new(&app_id, &app_secret, &open_id);
         notifier.send(&card)?;
 
         // 更新缓存（除非全部重复）

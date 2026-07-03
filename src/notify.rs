@@ -6,20 +6,21 @@ pub trait Notifier {
     fn send(&self, payload: &Value) -> Result<()>;
 }
 
-/// 飞书应用推送器（使用 App ID + App Secret 认证）
+/// 飞书应用推送器（使用 App ID + App Secret 认证，发送给指定用户 1on1）
 pub struct FeishuAppNotifier {
     app_id: String,
     app_secret: String,
-    chat_id: String,
+    open_id: String,
     client: reqwest::blocking::Client,
 }
 
 impl FeishuAppNotifier {
     /// 创建飞书应用推送器
     ///
-    /// 需要飞书企业自建应用的 App ID 和 App Secret，
-    /// 以及目标群的 chat_id（格式: oc_xxxxxxxxxx）
-    pub fn new(app_id: &str, app_secret: &str, chat_id: &str) -> Self {
+    /// - `app_id`: 飞书企业自建应用的 App ID
+    /// - `app_secret`: 飞书企业自建应用的 App Secret
+    /// - `open_id`: 你的用户 open_id（在飞书开放平台 → 应用 → 测试用户 中获取）
+    pub fn new(app_id: &str, app_secret: &str, open_id: &str) -> Self {
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()
@@ -27,12 +28,12 @@ impl FeishuAppNotifier {
         FeishuAppNotifier {
             app_id: app_id.to_string(),
             app_secret: app_secret.to_string(),
-            chat_id: chat_id.to_string(),
+            open_id: open_id.to_string(),
             client,
         }
     }
 
-    /// 获取 tenant_access_token（自动处理 2 小时过期）
+    /// 获取 tenant_access_token
     fn get_token(&self) -> Result<String> {
         let resp = self
             .client
@@ -54,14 +55,14 @@ impl FeishuAppNotifier {
         Ok(token.to_string())
     }
 
-    /// 发送消息到指定群聊
+    /// 发送消息到用户 1on1 对话
     fn send_message(&self, token: &str, content: &str) -> Result<()> {
         let resp = self
             .client
-            .post("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id")
+            .post("https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id")
             .header("Authorization", format!("Bearer {}", token))
             .json(&json!({
-                "receive_id": self.chat_id,
+                "receive_id": self.open_id,
                 "msg_type": "interactive",
                 "content": content,
             }))
@@ -79,7 +80,6 @@ impl FeishuAppNotifier {
 impl Notifier for FeishuAppNotifier {
     fn send(&self, payload: &Value) -> Result<()> {
         let token = self.get_token()?;
-        // interactive 卡片的 content 字段是 JSON 字符串
         let content = serde_json::to_string(payload.get("card").unwrap_or(payload))
             .context("序列化卡片内容失败")?;
         self.send_message(&token, &content)?;
@@ -94,14 +94,14 @@ mod tests {
 
     #[test]
     fn test_new_notifier() {
-        let notifier = FeishuAppNotifier::new("app_id", "app_secret", "oc_test");
+        let notifier = FeishuAppNotifier::new("app_id", "app_secret", "ou_test");
         assert_eq!(notifier.app_id, "app_id");
-        assert_eq!(notifier.chat_id, "oc_test");
+        assert_eq!(notifier.open_id, "ou_test");
     }
 
     #[test]
     fn test_send_with_invalid_credentials() {
-        let notifier = FeishuAppNotifier::new("invalid", "invalid", "oc_test");
+        let notifier = FeishuAppNotifier::new("invalid", "invalid", "ou_test");
         let payload = serde_json::json!({"msg_type": "text", "content": {"text": "test"}});
         let result = notifier.send(&payload);
         assert!(result.is_err(), "无效凭证应返回错误");
@@ -109,8 +109,8 @@ mod tests {
 
     #[test]
     fn test_trait_object() {
-        let notifier = FeishuAppNotifier::new("app_id", "app_secret", "oc_test");
+        let notifier = FeishuAppNotifier::new("app_id", "app_secret", "ou_test");
         let notifier_ref: &dyn Notifier = &notifier;
-        let _ = notifier_ref; // 验证 trait 对象可以创建
+        let _ = notifier_ref;
     }
 }
