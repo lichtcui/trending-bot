@@ -10,7 +10,7 @@ use std::collections::HashSet;
 use anyhow::{Context, Result};
 use format::CardVariant;
 use source::{GitHubTrending, TrendingSource};
-use notify::{FeishuNotifier, Notifier};
+use notify::{FeishuAppNotifier, Notifier};
 use cache::RepoCache;
 
 fn main() -> Result<()> {
@@ -52,8 +52,12 @@ fn main() -> Result<()> {
 
     // 3. 飞书推送（除非 dry-run）
     if !dry_run {
-        let webhook_url = std::env::var("FEISHU_WEBHOOK_URL")
-            .context("请设置 FEISHU_WEBHOOK_URL 环境变量")?;
+        let app_id = std::env::var("FEISHU_APP_ID")
+            .context("请设置 FEISHU_APP_ID 环境变量（飞书应用 App ID）")?;
+        let app_secret = std::env::var("FEISHU_APP_SECRET")
+            .context("请设置 FEISHU_APP_SECRET 环境变量（飞书应用 App Secret）")?;
+        let chat_id = std::env::var("FEISHU_CHAT_ID")
+            .context("请设置 FEISHU_CHAT_ID 环境变量（目标群聊 ID，格式 oc_xxx）")?;
 
         let card = if all_new {
             format::format_card(&repos, CardVariant::Full)
@@ -63,7 +67,7 @@ fn main() -> Result<()> {
             format::format_card(&[], CardVariant::Stale)
         };
 
-        let notifier = FeishuNotifier::new(&webhook_url);
+        let notifier = FeishuAppNotifier::new(&app_id, &app_secret, &chat_id);
         notifier.send(&card)?;
 
         // 更新缓存（除非全部重复）
