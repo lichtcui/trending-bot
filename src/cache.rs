@@ -22,16 +22,15 @@ pub struct RepoCache {
 impl RepoCache {
     /// 创建缓存管理器。
     ///
-    /// `CACHE_DIR` 环境变量优先，否则使用 `~/.cache/trending-bot`。
+    /// 使用 macOS 标准缓存目录: ~/Library/Caches/trending-bot/
     pub fn new() -> Self {
-        let cache_dir = if let Ok(dir) = std::env::var("CACHE_DIR") {
-            PathBuf::from(dir)
-        } else {
-            let home = std::env::var("HOME")
-                .or_else(|_| std::env::var("USERPROFILE"))
-                .unwrap_or_else(|_| ".".to_string());
-            PathBuf::from(home).join(".cache").join("trending-bot")
-        };
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_else(|_| ".".to_string());
+        let cache_dir = PathBuf::from(home)
+            .join("Library")
+            .join("Caches")
+            .join("trending-bot");
         RepoCache { cache_dir }
     }
 

@@ -15,24 +15,22 @@ use notify::{FeishuAppNotifier, Notifier};
 use cache::RepoCache;
 
 fn main() -> Result<()> {
-    dotenvy::dotenv().ok();
-
     // 简单的 CLI 参数解析（避免引入 clap 依赖）
     let args: Vec<String> = std::env::args().collect();
     let json_mode = args.contains(&"--json".to_string());
     let dry_run = args.contains(&"--dry-run".to_string());
 
+    // 解析 --count N 或 -c N
+    let count: usize = args.windows(2)
+        .find(|w| w[0] == "--count" || w[0] == "-c")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(5);
+
     // 从 macOS Keychain 读取飞书凭证
-    // 如果 Keychain 不可用，回退到环境变量
     let (app_id, app_secret) = keychain::Keychain::get_app_credentials()
         .unwrap_or_else(|_| ("".to_string(), "".to_string()));
     let open_id = keychain::Keychain::get_open_id()
         .unwrap_or_default();
-
-    let count: usize = std::env::var("TRENDING_COUNT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(5);
 
     // 1. 获取 Trending 项目
     let source = GitHubTrending;
