@@ -18,8 +18,8 @@ impl GitHubTrending {
         let link_sel = Selector::parse("h2.h3.lh-condensed a").ok()?;
         let desc_sel = Selector::parse("p.col-9.color-fg-muted").ok()?;
         let lang_sel = Selector::parse("span[itemprop='programmingLanguage']").ok()?;
-        let star_total_sel = Selector::parse("a.Link--muted.d-inline-block.mr-3 .float-sm-right").ok()?;
-        let star_today_sel = Selector::parse("a[href*='since='] .float-sm-right").ok()?;
+        let star_total_sel = Selector::parse("a[href$='/stargazers']").ok()?;
+        let star_today_sel = Selector::parse("span.d-inline-block.float-sm-right").ok()?;
 
         // --- 名称 + URL ---
         let link = row.select(&link_sel).next()?;
@@ -47,25 +47,27 @@ impl GitHubTrending {
             .filter(|s| !s.is_empty());
 
         // --- 总 Star 数 ---
-        // 取第一个匹配的 .float-sm-right 数字文本
+        // 从 stargazers 链接的文本中提取（跳过 SVG 图标文本）
         let stars_total = row
             .select(&star_total_sel)
             .next()
             .and_then(|e| {
-                let text = e.text().collect::<String>();
-                parse_star_count(&text)
+                let text: String = e.text().collect();
+                // 过滤掉 SVG 图标的内容，只保留数字
+                let cleaned: String = text.chars().filter(|c| c.is_ascii_digit() || *c == ',' || *c == '.' || *c == 'k' || *c == 'm' || *c == 'K' || *c == 'M').collect();
+                parse_star_count(&cleaned)
             })
             .unwrap_or(0);
 
         // --- 今日 Star 数 ---
-        // 文本形如 "567 stars today" → 提取第一个数字
+        // 文本形如 "2,804 stars today" → 提取第一个数字
         let stars_today = row
             .select(&star_today_sel)
             .next()
             .and_then(|e| {
                 let text = e.text().collect::<String>();
                 text.split_whitespace()
-                    .next()
+                    .find(|s| s.chars().next().map_or(false, |c| c.is_ascii_digit()))
                     .and_then(|n| n.replace(',', "").parse::<u64>().ok())
             })
             .unwrap_or(0);
@@ -130,20 +132,32 @@ mod tests {
         let html = r#"
 <article class="Box-row">
   <h2 class="h3 lh-condensed">
-    <a href="/rust-lang/rust">rust-lang / <strong>rust</strong></a>
+    <a data-view-component="true" class="Link" href="/rust-lang/rust">
+      <span data-view-component="true" class="text-normal">rust-lang /</span>
+      rust
+    </a>
   </h2>
-  <p class="col-9 color-fg-muted my-1 pr-4">
+  <p class="col-9 color-fg-muted my-1 tmp-pr-4">
     A safe, concurrent, practical language.
   </p>
   <div class="f6 color-fg-muted mt-2">
-    <a href="/rust-lang/rust" class="Link--muted d-inline-block mr-3">
-      <span>★</span>
-      <span class="d-inline-block float-sm-right">101,234</span>
+    <span class="tmp-mr-3 d-inline-block ml-0 tmp-ml-0">
+      <span class="repo-language-color" style="background-color: #3572A5"></span>
+      <span itemprop="programmingLanguage">Rust</span>
+    </span>
+    <a href="/rust-lang/rust/stargazers" data-view-component="true" class="tmp-mr-3 Link Link--muted d-inline-block">
+      <svg aria-label="star" role="img" class="octicon octicon-star"><path d="..."></path></svg>
+      101,234
     </a>
-    <a href="/trending?since=daily" class="Link--muted d-inline-block mr-3">
-      <span class="d-inline-block float-sm-right">567 stars today</span>
+    <a href="/rust-lang/rust/forks" data-view-component="true" class="tmp-mr-3 Link Link--muted d-inline-block">
+      <svg aria-label="fork" role="img" class="octicon octicon-repo-forked"><path d="..."></path></svg>
+      5,678
     </a>
-    <span class="d-inline-block mr-3" itemprop="programmingLanguage">Rust</span>
+    <span data-view-component="true" class="tmp-mr-3 d-inline-block">Built by someone</span>
+    <span data-view-component="true" class="d-inline-block float-sm-right">
+      <svg aria-hidden="true" class="octicon octicon-star"><path d="..."></path></svg>
+      567 stars today
+    </span>
   </div>
 </article>
 "#;
@@ -166,32 +180,46 @@ mod tests {
         let html = r#"
 <article class="Box-row">
   <h2 class="h3 lh-condensed">
-    <a href="/rust-lang/rust">rust-lang / <strong>rust</strong></a>
+    <a data-view-component="true" class="Link" href="/rust-lang/rust">
+      <span class="text-normal">rust-lang /</span> rust
+    </a>
   </h2>
-  <p class="col-9 color-fg-muted my-1 pr-4">A safe language.</p>
+  <p class="col-9 color-fg-muted my-1 tmp-pr-4">A safe language.</p>
   <div class="f6 color-fg-muted mt-2">
-    <a href="/rust-lang/rust" class="Link--muted d-inline-block mr-3">
-      <span>★</span><span class="d-inline-block float-sm-right">101k</span>
+    <span class="tmp-mr-3 d-inline-block">
+      <span class="repo-language-color"></span>
+      <span itemprop="programmingLanguage">Rust</span>
+    </span>
+    <a href="/rust-lang/rust/stargazers" class="tmp-mr-3 Link Link--muted d-inline-block">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      101k
     </a>
-    <a href="/trending?since=daily" class="Link--muted d-inline-block mr-3">
-      <span class="d-inline-block float-sm-right">567 stars today</span>
-    </a>
-    <span class="d-inline-block mr-3" itemprop="programmingLanguage">Rust</span>
+    <span class="d-inline-block float-sm-right">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      567 stars today
+    </span>
   </div>
 </article>
 <article class="Box-row">
   <h2 class="h3 lh-condensed">
-    <a href="/denoland/deno">denoland / <strong>deno</strong></a>
+    <a data-view-component="true" class="Link" href="/denoland/deno">
+      <span class="text-normal">denoland /</span> deno
+    </a>
   </h2>
-  <p class="col-9 color-fg-muted my-1 pr-4">A modern runtime.</p>
+  <p class="col-9 color-fg-muted my-1 tmp-pr-4">A modern runtime.</p>
   <div class="f6 color-fg-muted mt-2">
-    <a href="/denoland/deno" class="Link--muted d-inline-block mr-3">
-      <span>★</span><span class="d-inline-block float-sm-right">100k</span>
+    <span class="tmp-mr-3 d-inline-block">
+      <span class="repo-language-color"></span>
+      <span itemprop="programmingLanguage">TypeScript</span>
+    </span>
+    <a href="/denoland/deno/stargazers" class="tmp-mr-3 Link Link--muted d-inline-block">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      100k
     </a>
-    <a href="/trending?since=daily" class="Link--muted d-inline-block mr-3">
-      <span class="d-inline-block float-sm-right">234 stars today</span>
-    </a>
-    <span class="d-inline-block mr-3" itemprop="programmingLanguage">TypeScript</span>
+    <span class="d-inline-block float-sm-right">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      234 stars today
+    </span>
   </div>
 </article>
 "#;
@@ -223,17 +251,23 @@ mod tests {
                 r#"
 <article class="Box-row">
   <h2 class="h3 lh-condensed">
-    <a href="/owner/repo-{i}">owner / <strong>repo-{i}</strong></a>
+    <a class="Link" href="/owner/repo-{i}">
+      <span class="text-normal">owner /</span> repo-{i}
+    </a>
   </h2>
-  <p class="col-9 color-fg-muted my-1 pr-4">Repo {i}</p>
+  <p class="col-9 color-fg-muted my-1 tmp-pr-4">Repo {i}</p>
   <div class="f6 color-fg-muted mt-2">
-    <a href="/owner/repo-{i}" class="Link--muted d-inline-block mr-3">
-      <span>★</span><span class="d-inline-block float-sm-right">{i}k</span>
+    <a href="/owner/repo-{i}/stargazers" class="tmp-mr-3 Link Link--muted d-inline-block">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      {i}k
     </a>
-    <a href="/trending?since=daily" class="Link--muted d-inline-block mr-3">
-      <span class="d-inline-block float-sm-right">{i}00 stars today</span>
-    </a>
-    <span class="d-inline-block mr-3" itemprop="programmingLanguage">Rust</span>
+    <span class="d-inline-block float-sm-right">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      {i}00 stars today
+    </span>
+    <span class="tmp-mr-3 d-inline-block">
+      <span itemprop="programmingLanguage">Rust</span>
+    </span>
   </div>
 </article>
 "#, i = i));
@@ -249,15 +283,19 @@ mod tests {
         let html = r#"
 <article class="Box-row">
   <h2 class="h3 lh-condensed">
-    <a href="/org/empty-desc">org / <strong>empty-desc</strong></a>
+    <a class="Link" href="/org/empty-desc">
+      <span class="text-normal">org /</span> empty-desc
+    </a>
   </h2>
   <div class="f6 color-fg-muted mt-2">
-    <a href="/org/empty-desc" class="Link--muted d-inline-block mr-3">
-      <span>★</span><span class="d-inline-block float-sm-right">42</span>
+    <a href="/org/empty-desc/stargazers" class="tmp-mr-3 Link Link--muted d-inline-block">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      42
     </a>
-    <a href="/trending?since=daily" class="Link--muted d-inline-block mr-3">
-      <span class="d-inline-block float-sm-right">5 stars today</span>
-    </a>
+    <span class="d-inline-block float-sm-right">
+      <svg class="octicon octicon-star"><path d="..."></path></svg>
+      5 stars today
+    </span>
   </div>
 </article>
 "#;
