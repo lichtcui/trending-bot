@@ -22,7 +22,7 @@
 
 | 组件 | 技术 | 理由 |
 |---|---|---|
-| 语言 | Rust 1.95.0 stable | 用户指定 |
+| 语言 | Rust 1.98.0 nightly | 用户运行环境
 | HTTP 客户端 | reqwest 0.13 (blocking) | CLI 单次请求，无需异步 |
 | HTML 解析 | scraper 0.27 | CSS 选择器解析 GitHub Trending 静态 HTML |
 | JSON | serde 1.0 + serde_json 1.0 | Rust 标准 JSON 方案 |

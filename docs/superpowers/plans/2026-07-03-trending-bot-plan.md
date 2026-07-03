@@ -6,7 +6,7 @@
 
 **架构：** 模块化单体 CLI，分为 source（数据源）、repo（数据模型）、cache（缓存）、format（卡片格式化）、notify（推送）五个模块，通过 trait 接口解耦。使用 reqwest blocking 同步 HTTP + scraper HTML 解析。
 
-**技术栈：** Rust 1.95.0, reqwest 0.13 (blocking), scraper 0.27, serde 1.0 + serde_json 1.0, anyhow 1.0, chrono 0.4, dotenvy 0.15
+**技术栈：** Rust 1.98.0 (nightly), reqwest 0.13 (blocking), scraper 0.27, serde 1.0 + serde_json 1.0, anyhow 1.0, chrono 0.4, dotenvy 0.15
 
 ---
 
