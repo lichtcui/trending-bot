@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use scraper::{Html, Selector};
 
+use crate::item::TrendingItem;
 use crate::repo::{parse_star_count, Repo};
 
 /// 预编译的 CSS 选择器，避免每行重复编译
@@ -29,9 +30,10 @@ impl TrendingSelectors {
     }
 }
 
-/// 数据源 trait — 为今后扩展其他来源（如 GitHub API）做准备
+/// 数据源 trait — 泛化为多源支持
 pub trait TrendingSource {
-    fn fetch_trending(&self, count: usize) -> Result<Vec<Repo>>;
+    fn source_name(&self) -> &'static str;
+    fn fetch(&self, count: usize) -> Result<Vec<TrendingItem>>;
 }
 
 /// GitHub Trending 页面抓取器
@@ -127,8 +129,18 @@ impl Default for GitHubTrending {
     }
 }
 
+impl GitHubTrending {
+    pub fn source_name(&self) -> &'static str {
+        "github_trending"
+    }
+}
+
 impl TrendingSource for GitHubTrending {
-    fn fetch_trending(&self, count: usize) -> Result<Vec<Repo>> {
+    fn source_name(&self) -> &'static str {
+        "github_trending"
+    }
+
+    fn fetch(&self, count: usize) -> Result<Vec<TrendingItem>> {
         let url = "https://github.com/trending?since=daily";
         let html = self
             .client
@@ -138,7 +150,8 @@ impl TrendingSource for GitHubTrending {
             .text()
             .context("读取响应内容失败")?;
 
-        parse_from_html(&html, count)
+        let repos = parse_from_html(&html, count)?;
+        Ok(repos_to_items(&repos, "github_trending"))
     }
 }
 
@@ -163,6 +176,25 @@ pub(crate) fn parse_from_html(html: &str, count: usize) -> Result<Vec<Repo>> {
     );
 
     Ok(repos)
+}
+
+/// 将 Repo 列表映射为统一 TrendingItem 列表
+pub(crate) fn repos_to_items(repos: &[Repo], source_name: &str) -> Vec<TrendingItem> {
+    repos.iter().map(|r| {
+        let id = r.name.clone();
+        let score = if r.stars_today > 0 { Some(r.stars_today) } else { None };
+        TrendingItem {
+            source: source_name.to_string(),
+            id,
+            title: r.name.clone(),
+            url: r.url.clone(),
+            description: r.description.clone(),
+            score,
+            author: None,
+            comments_url: None,
+            external_content: None,
+        }
+    }).collect()
 }
 
 #[cfg(test)]
@@ -329,6 +361,79 @@ mod tests {
         let gh = GitHubTrending::with_client(client);
         // 不发起请求，仅验证构造成功
         let _ = gh;
+    }
+
+    #[test]
+    fn test_repos_to_items() {
+        let repos = vec![
+            Repo {
+                name: "rust-lang/rust".into(),
+                url: "https://github.com/rust-lang/rust".into(),
+                description: Some("A safe language.".into()),
+                language: Some("Rust".into()),
+                stars_total: 100000,
+                stars_today: 500,
+            }
+        ];
+        let items = repos_to_items(&repos, "github_trending");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].source, "github_trending");
+        assert_eq!(items[0].id, "rust-lang/rust");
+        assert_eq!(items[0].title, "rust-lang/rust");
+        assert_eq!(items[0].url, "https://github.com/rust-lang/rust");
+        assert_eq!(items[0].description.as_deref(), Some("A safe language."));
+        assert_eq!(items[0].score, Some(500));
+        assert_eq!(items[0].author, None);
+        assert_eq!(items[0].comments_url, None);
+        assert!(items[0].external_content.is_none());
+    }
+
+    #[test]
+    fn test_repos_to_items_zero_stars_today() {
+        let repos = vec![
+            Repo {
+                name: "owner/repo".into(),
+                url: "https://github.com/owner/repo".into(),
+                description: None,
+                language: None,
+                stars_total: 100,
+                stars_today: 0,
+            }
+        ];
+        let items = repos_to_items(&repos, "github_trending");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].source, "github_trending");
+        assert_eq!(items[0].id, "owner/repo");
+        assert_eq!(items[0].description, None);
+        assert_eq!(items[0].score, None);
+        assert!(items[0].comments_url.is_none());
+        assert!(items[0].external_content.is_none());
+    }
+
+    #[test]
+    fn test_repos_to_items_multiple() {
+        let repos = vec![
+            Repo {
+                name: "a/b".into(),
+                url: "https://github.com/a/b".into(),
+                description: None,
+                language: None,
+                stars_total: 0,
+                stars_today: 10,
+            },
+            Repo {
+                name: "c/d".into(),
+                url: "https://github.com/c/d".into(),
+                description: None,
+                language: None,
+                stars_total: 0,
+                stars_today: 20,
+            },
+        ];
+        let items = repos_to_items(&repos, "github_trending");
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "a/b");
+        assert_eq!(items[1].id, "c/d");
     }
 
     #[test]

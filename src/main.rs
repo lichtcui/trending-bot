@@ -23,9 +23,10 @@ fn main() -> Result<()> {
 
     // 1. 获取 Trending 项目
     let source = GitHubTrending::new();
-    let repos = source
-        .fetch_trending(count)
+    let items = source
+        .fetch(count)
         .context("获取 GitHub Trending 失败")?;
+    let items: Vec<crate::item::TrendingItem> = items;
 
     // 2. 加载缓存，对比新旧
     let cache = cache::RepoCache::new();
@@ -36,6 +37,18 @@ fn main() -> Result<()> {
             HashSet::new()
         }
     };
+
+    // 临时适配：只保留 repo name 用于缓存对比
+    let repos: Vec<crate::repo::Repo> = items.iter().map(|i| {
+        crate::repo::Repo {
+            name: i.id.clone(),
+            url: i.url.clone(),
+            description: i.description.clone(),
+            language: None,
+            stars_total: 0,
+            stars_today: i.score.unwrap_or(0),
+        }
+    }).collect();
 
     let (old, new) = cache.diff(&repos, &last_names);
 
