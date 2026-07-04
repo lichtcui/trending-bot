@@ -77,7 +77,7 @@ fn parse_story(data: &serde_json::Value) -> Option<TrendingItem> {
     let title = data.get("title")?.as_str()?.to_string();
     let url = data.get("url")?.as_str()?.to_string();
     if url.is_empty() {
-        return None; // 过滤 Ask HN / Show HN 等内部页面
+        return None; // 过滤无外部链接的条目（如某些文本帖）
     }
     let score = data.get("score").and_then(|v| v.as_u64());
     let author = data.get("by").and_then(|v| v.as_str().map(String::from));
