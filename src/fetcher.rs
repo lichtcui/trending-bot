@@ -43,12 +43,13 @@ impl ContentFetcher {
             .ok()?;
 
         let text = resp.text().ok()?;
-        let word_count = text.split_whitespace().count();
+        let truncated = truncate_text(&text, 5000);
+        let word_count = truncated.split_whitespace().count();
 
         Some(ExternalContent {
             url: format!("https://github.com/{}/{}/blob/main/README.md", owner, repo),
             content_type: ContentType::GitHubReadme,
-            text: truncate_text(&text, 5000),
+            text: truncated,
             word_count,
         })
     }
@@ -175,7 +176,15 @@ pub(crate) fn truncate_text(text: &str, max_chars: usize) -> String {
     if text.len() <= max_chars {
         return text.to_string();
     }
-    let mut truncated = text[..max_chars].to_string();
+    // 安全截断：找到不超过 max_chars 的最新 UTF-8 字符边界，避免 panic
+    // 使用 char_indices 逐个检查字符结束位置是否在边界内
+    let cutoff = text
+        .char_indices()
+        .take_while(|(i, c)| i + c.len_utf8() <= max_chars)
+        .last()
+        .map(|(i, c)| i + c.len_utf8())
+        .unwrap_or(0);
+    let mut truncated = text[..cutoff].to_string();
     truncated.push_str("...");
     truncated
 }
@@ -252,6 +261,17 @@ mod tests {
     fn test_short_text_not_truncated() {
         let text = "hello world";
         assert_eq!(truncate_text(text, 100), text);
+    }
+
+    #[test]
+    fn test_truncate_multibyte_char_boundary() {
+        // 中文文本，如果按字节截断会 panic，校验安全回退到字符边界
+        let text = "你好世界，这是一个测试";
+        let truncated = truncate_text(text, 10); // 字节 10 落在 3 字节字符中间
+        assert!(truncated.ends_with("..."));
+        // '世'结束于字节 8（6+3），回退到字节 9（'世'的结尾），内容 9 字节 + "..." = 12 字节
+        assert_eq!(truncated.len(), 12);
+        assert_eq!(truncated, "你好世...");
     }
 
     #[test]
