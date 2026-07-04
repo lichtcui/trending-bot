@@ -6,6 +6,7 @@ mod lobsters;
 mod output;
 mod repo;
 mod source;
+mod summary;
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,6 +23,7 @@ fn main() -> Result<()> {
     let json_mode = args.iter().any(|a| a == "--json");
     let dry_run = args.iter().any(|a| a == "--dry-run");
     let fetch_content = !args.iter().any(|a| a == "--no-content");
+    let do_summarize = args.iter().any(|a| a == "--summarize");
 
     // 解析 --count N 或 -c N
     let count: usize = args.windows(2)
@@ -120,6 +122,24 @@ fn main() -> Result<()> {
         }
     }
 
+    // 4.5 LLM 总结（仅对新项目且有外部内容的条目，自动分批调 API）
+    let mut summarized_count = 0usize;
+    if do_summarize && !new_item_ids.is_empty() {
+        match summary::Summarizer::new() {
+            Ok(summarizer) => {
+                let new_count = new_item_ids.len();
+                let content_count = all_items.iter()
+                    .filter(|item| new_item_ids.contains(&item.id) && item.external_content.is_some())
+                    .count();
+                eprintln!("🤖 新项目 {} 条，其中 {} 条有外部内容，正在调用 DeepSeek 总结...", new_count, content_count);
+                summarized_count = summarizer.summarize_items(&mut all_items);
+            }
+            Err(e) => {
+                eprintln!("⚠️ 初始化总结器失败: {} (跳过总结)", e);
+            }
+        }
+    }
+
     // 5. 统计各源 & 构建输出引用
     let mut by_source: HashMap<String, SourceDiff> = HashMap::new();
     let new_refs: Vec<&TrendingItem> = all_items.iter()
@@ -162,6 +182,9 @@ fn main() -> Result<()> {
         println!("\n缓存: {} 新 / {} 旧", new_refs.len(), old_refs.len());
         if fetch_content {
             println!("内容: {} 新抓取 / {} 缓存命中 / {} 失败", fetched_content, cached_content, failed_content);
+        }
+        if do_summarize {
+            println!("总结: {} 条已总结", summarized_count);
         }
     }
 

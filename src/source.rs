@@ -190,6 +190,7 @@ pub(crate) fn repos_to_items(repos: &[Repo], source_name: &str) -> Vec<TrendingI
             url: r.url.clone(),
             score,
             external_content: None,
+            summary: None,
         }
     }).collect()
 }

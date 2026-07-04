@@ -53,6 +53,9 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
         let short_id = item.get("short_id")?.as_str()?;
         let title = item.get("title")?.as_str()?.to_string();
         let url = item.get("url")?.as_str()?.to_string();
+        if url.is_empty() {
+            return None; // 过滤无外部链接的条目（如文本帖）
+        }
         let score = item.get("score").and_then(|v| v.as_u64());
         Some(TrendingItem {
             source: source.to_string(),
@@ -61,6 +64,7 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
             url,
             score,
             external_content: None,
+            summary: None,
         })
     }).collect()
 }
@@ -127,8 +131,8 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_lobsters_self_post() {
-        // Self-posts on Lobsters have empty url
+    fn test_parse_lobsters_self_post_filtered() {
+        // Self-posts on Lobsters with empty url should be filtered out
         let json = serde_json::json!([{
             "short_id": "self1",
             "title": "Ask Lobsters: Something",
@@ -137,8 +141,7 @@ mod tests {
             "submitter_user": "asker"
         }]);
         let items = parse_stories(json.as_array().unwrap(), "lobsters");
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].url, "");
+        assert_eq!(items.len(), 0);
     }
 
     #[test]

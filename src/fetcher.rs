@@ -24,10 +24,10 @@ impl ContentFetcher {
     /// 抓取一个帖子的外部链接内容
     pub fn fetch(&self, item: &TrendingItem) -> Option<ExternalContent> {
         let url = &item.url;
-        if detect_content_type(url) == ContentType::GitHubReadme {
-            self.fetch_github_readme(url)
-        } else {
-            self.fetch_web_article(url)
+        match detect_content_type(url) {
+            ContentType::GitHubReadme => self.fetch_github_readme(url),
+            ContentType::GitHubIssue => self.fetch_github_issue(url),
+            ContentType::WebArticle => self.fetch_web_article(url),
         }
     }
 
@@ -53,6 +53,41 @@ impl ContentFetcher {
         Some(ExternalContent {
             url: format!("https://github.com/{}/{}/blob/main/README.md", owner, repo),
             content_type: ContentType::GitHubReadme,
+            text: truncated,
+            word_count,
+        })
+    }
+
+    fn fetch_github_issue(&self, url: &str) -> Option<ExternalContent> {
+        let (owner, repo) = extract_repo_name(url)?;
+        // 从 URL 中提取 issue number
+        let issue_number = url.split('/')
+            .filter_map(|s| s.parse::<u64>().ok())
+            .next()?;
+        let api_url = format!("https://api.github.com/repos/{}/{}/issues/{}", owner, repo, issue_number);
+
+        let resp = self.client
+            .get(&api_url)
+            .header("User-Agent", "trending-bot/0.1.0")
+            .header("Accept", "application/vnd.github.v3+json")
+            .send()
+            .ok()?;
+
+        if !resp.status().is_success() {
+            return None;
+        }
+
+        let data: serde_json::Value = resp.json().ok()?;
+        let title = data.get("title").and_then(|v| v.as_str()).unwrap_or("");
+        let body = data.get("body").and_then(|v| v.as_str()).unwrap_or("");
+
+        let full_text = format!("# {}\n\n{}", title, body);
+        let truncated = truncate_text(&full_text, 5000);
+        let word_count = truncated.split_whitespace().count();
+
+        Some(ExternalContent {
+            url: url.to_string(),
+            content_type: ContentType::GitHubIssue,
             text: truncated,
             word_count,
         })
@@ -107,21 +142,41 @@ impl Default for ContentFetcher {
 pub(crate) fn detect_content_type(url: &str) -> ContentType {
     if is_github_repo_url(url) {
         ContentType::GitHubReadme
+    } else if is_github_issue_url(url) {
+        ContentType::GitHubIssue
     } else {
         ContentType::WebArticle
     }
 }
 
-/// 判断是否为 GitHub repo URL
+/// 判断是否为 GitHub repo 主页 URL（精确匹配，排除 issue/PR/tree 等子页面）
+/// 匹配格式: github.com/owner/repo 或 github.com/owner/repo/
 pub(crate) fn is_github_repo_url(url: &str) -> bool {
     let parts: Vec<&str> = url.trim_start_matches("https://")
         .trim_start_matches("http://")
         .split('/')
+        .filter(|s| !s.is_empty())
         .collect();
-    parts.len() >= 3 && parts[0] == "github.com" && !parts[1].is_empty() && !parts[2].is_empty()
+    parts.len() == 3 && parts[0] == "github.com" && !parts[1].is_empty() && !parts[2].is_empty()
 }
 
-/// 提取 owner/repo
+/// 判断是否为 GitHub Issue URL
+/// 匹配格式: github.com/owner/repo/issues/N
+pub(crate) fn is_github_issue_url(url: &str) -> bool {
+    let parts: Vec<&str> = url.trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .collect();
+    parts.len() >= 5
+        && parts[0] == "github.com"
+        && !parts[1].is_empty()
+        && !parts[2].is_empty()
+        && parts[3] == "issues"
+        && parts[4].parse::<u64>().is_ok()
+}
+
+/// 提取 owner/repo（同时兼容 repo 主页和 issue URL）
 pub(crate) fn extract_repo_name(url: &str) -> Option<(String, String)> {
     let parts: Vec<&str> = url.trim_start_matches("https://")
         .trim_start_matches("http://")
@@ -198,12 +253,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_detect_github_url() {
+    fn test_is_github_repo_url() {
         assert!(is_github_repo_url("https://github.com/rust-lang/rust"));
         assert!(is_github_repo_url("https://github.com/rust-lang/rust/"));
-        assert!(is_github_repo_url("https://github.com/rust-lang/rust/issues/1"));
+        // Issue URLs 不再是 repo URL
+        assert!(!is_github_repo_url("https://github.com/rust-lang/rust/issues/1"));
+        assert!(!is_github_repo_url("https://github.com/rust-lang/rust/pull/42"));
         assert!(!is_github_repo_url("https://example.com/article"));
         assert!(!is_github_repo_url("https://github.com"));
+    }
+
+    #[test]
+    fn test_is_github_issue_url() {
+        assert!(is_github_issue_url("https://github.com/rust-lang/rust/issues/1"));
+        assert!(is_github_issue_url("https://github.com/anthropics/claude-code/issues/74066"));
+        // Repo 主页不是 issue
+        assert!(!is_github_issue_url("https://github.com/rust-lang/rust"));
+        assert!(!is_github_issue_url("https://github.com/rust-lang/rust/"));
+        // PR 不是 issue
+        assert!(!is_github_issue_url("https://github.com/rust-lang/rust/pull/42"));
+        // 非 GitHub 不是 issue
+        assert!(!is_github_issue_url("https://example.com/article"));
     }
 
     #[test]
@@ -281,6 +351,11 @@ mod tests {
     #[test]
     fn test_detect_content_type() {
         assert_eq!(detect_content_type("https://github.com/rust-lang/rust"), ContentType::GitHubReadme);
+        assert_eq!(detect_content_type("https://github.com/rust-lang/rust/"), ContentType::GitHubReadme);
+        assert_eq!(detect_content_type("https://github.com/rust-lang/rust/issues/123"), ContentType::GitHubIssue);
+        assert_eq!(detect_content_type("https://github.com/anthropics/claude-code/issues/74066"), ContentType::GitHubIssue);
         assert_eq!(detect_content_type("https://example.com/blog"), ContentType::WebArticle);
+        // PR 暂时走 WebArticle 抓取 HTML
+        assert_eq!(detect_content_type("https://github.com/rust-lang/rust/pull/42"), ContentType::WebArticle);
     }
 }

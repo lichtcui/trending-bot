@@ -8,7 +8,10 @@ pub struct TrendingItem {
     pub title: String,
     pub url: String,
     pub score: Option<u64>,
+    #[serde(skip)]
     pub external_content: Option<ExternalContent>,
+    /// LLM 生成的总结文本（供 AI 消费）
+    pub summary: Option<String>,
 }
 
 /// 链接背后抓取的内容
@@ -23,7 +26,11 @@ pub struct ExternalContent {
 /// 内容类型
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub enum ContentType {
+    /// GitHub 仓库的 README
     GitHubReadme,
+    /// GitHub Issue 内容
+    GitHubIssue,
+    /// 普通网页文章
     WebArticle,
 }
 
@@ -40,6 +47,7 @@ mod tests {
             url: "https://example.com".into(),
             score: Some(100),
             external_content: None,
+            summary: None,
         };
         assert_eq!(item.source, "hacker_news");
         assert_eq!(item.id, "story_12345");
@@ -83,6 +91,7 @@ mod tests {
             url: "https://github.com/rust-lang/rust".into(),
             score: None,
             external_content: Some(content),
+            summary: None,
         };
         assert!(item.external_content.is_some());
         assert_eq!(item.external_content.as_ref().unwrap().content_type, ContentType::GitHubReadme);
