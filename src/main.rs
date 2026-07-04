@@ -1,4 +1,5 @@
 mod cache;
+mod fetcher;
 mod hn;
 mod item;
 mod lobsters;
