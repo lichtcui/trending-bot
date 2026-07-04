@@ -54,9 +54,6 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
         let title = item.get("title")?.as_str()?.to_string();
         let url = item.get("url")?.as_str()?.to_string();
         let score = item.get("score").and_then(|v| v.as_u64());
-        let author = item.get("submitter_user")
-            .and_then(|v| v.as_str())
-            .map(String::from);
         let description = item.get("description")
             .and_then(|v| v.as_str())
             .map(String::from)
@@ -72,7 +69,6 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
             url,
             description,
             score,
-            author,
             comments_url,
             external_content: None,
         })
@@ -101,7 +97,6 @@ mod tests {
         assert_eq!(items[0].source, "lobsters");
         assert_eq!(items[0].id, "story_abc123");
         assert_eq!(items[0].score, Some(85));
-        assert_eq!(items[0].author.as_deref(), Some("lobster_user"));
         assert_eq!(items[0].description.as_deref(), Some("A great article about Rust"));
     }
 
@@ -117,7 +112,6 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "story_def456");
         assert_eq!(items[0].title, "Minimal Post");
-        assert!(items[0].author.is_none());
         assert!(items[0].description.is_none());
         assert!(items[0].comments_url.is_none());
     }
@@ -145,7 +139,6 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].source, "lobsters");
         assert_eq!(items[0].id, "story_real1");
-        assert_eq!(items[0].author.as_deref(), Some("real_user"));
         assert_eq!(items[0].score, Some(99));
         assert!(items[0].description.is_some());
     }
@@ -163,7 +156,6 @@ mod tests {
         let items = parse_stories(json.as_array().unwrap(), "lobsters");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].url, "");
-        assert_eq!(items[0].author.as_deref(), Some("asker"));
     }
 
     #[test]

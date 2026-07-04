@@ -9,7 +9,6 @@ pub struct TrendingItem {
     pub url: String,
     pub description: Option<String>,
     pub score: Option<u64>,
-    pub author: Option<String>,
     pub comments_url: Option<String>,
     pub external_content: Option<ExternalContent>,
 }
@@ -43,7 +42,6 @@ mod tests {
             url: "https://example.com".into(),
             description: Some("A test story".into()),
             score: Some(100),
-            author: Some("testuser".into()),
             comments_url: Some("https://news.ycombinator.com/item?id=12345".into()),
             external_content: None,
         };
@@ -89,7 +87,6 @@ mod tests {
             url: "https://github.com/rust-lang/rust".into(),
             description: None,
             score: None,
-            author: None,
             comments_url: None,
             external_content: Some(content),
         };

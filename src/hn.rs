@@ -80,7 +80,6 @@ fn parse_story(data: &serde_json::Value) -> Option<TrendingItem> {
         return None; // 过滤无外部链接的条目（如某些文本帖）
     }
     let score = data.get("score").and_then(|v| v.as_u64());
-    let author = data.get("by").and_then(|v| v.as_str().map(String::from));
     let descendants = data.get("descendants").and_then(|v| v.as_u64());
     let comments_url = descendants.map(|_| {
         format!("https://news.ycombinator.com/item?id={}", id)
@@ -93,7 +92,6 @@ fn parse_story(data: &serde_json::Value) -> Option<TrendingItem> {
         url,
         description: None,
         score,
-        author,
         comments_url,
         external_content: None,
     })
@@ -120,7 +118,6 @@ mod tests {
         assert_eq!(item.title, "Test Story");
         assert_eq!(item.url, "https://example.com/1");
         assert_eq!(item.score, Some(150));
-        assert_eq!(item.author.as_deref(), Some("author1"));
         assert_eq!(item.comments_url.as_deref(), Some("https://news.ycombinator.com/item?id=42424242"));
     }
 
@@ -130,7 +127,6 @@ mod tests {
             "id": 42424243,
             "title": "Ask HN: What are you working on?",
             "score": 50,
-            "by": "author2",
             "type": "story"
         });
         assert!(parse_story(&json).is_none());
@@ -143,7 +139,6 @@ mod tests {
             "title": "Some post",
             "url": "",
             "score": 10,
-            "by": "author3",
             "type": "story"
         });
         assert!(parse_story(&json).is_none());
@@ -156,7 +151,6 @@ mod tests {
             "title": "No Comments",
             "url": "https://example.com/2",
             "score": 5,
-            "by": "author4",
             "type": "story"
         });
         let item = parse_story(&json).unwrap();

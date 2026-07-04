@@ -221,7 +221,6 @@ mod tests {
             url: url.to_string(),
             description: None,
             score: None,
-            author: None,
             comments_url: None,
             external_content: None,
         }
@@ -252,7 +251,6 @@ mod tests {
             url: r.url.clone(),
             description: None,
             score: None,
-            author: None,
             comments_url: None,
             external_content: None,
         }).collect();
@@ -274,7 +272,6 @@ mod tests {
             url: r.url.clone(),
             description: None,
             score: None,
-            author: None,
             comments_url: None,
             external_content: None,
         }).collect();
@@ -296,7 +293,6 @@ mod tests {
             url: r.url.clone(),
             description: None,
             score: None,
-            author: None,
             comments_url: None,
             external_content: None,
         }).collect();
@@ -415,7 +411,6 @@ mod tests {
             url: "https://github.com/rust-lang/rust".into(),
             description: None,
             score: None,
-            author: None,
             comments_url: None,
             external_content: Some(content),
         }];
