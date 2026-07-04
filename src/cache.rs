@@ -23,6 +23,9 @@ impl RepoCache {
     /// 创建缓存管理器。
     ///
     /// 使用 macOS 标准缓存目录: ~/Library/Caches/trending-bot/
+    /// 创建缓存管理器。
+    ///
+    /// 使用 macOS 标准缓存目录: ~/Library/Caches/trending-bot/
     pub fn new() -> Self {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
@@ -40,16 +43,23 @@ impl RepoCache {
 
     /// 加载上次缓存的 repo 名称集合。
     ///
-    /// 如果缓存文件不存在（首次运行），返回空集合。
+    /// - 缓存文件不存在（首次运行）→ 返回空集合
+    /// - 缓存文件损坏 → 返回明确的损坏提示
     pub fn load_last_names(&self) -> Result<HashSet<String>> {
         let path = self.cache_path();
         if !path.exists() {
             return Ok(HashSet::new());
         }
-        let content =
-            fs::read_to_string(&path).context(format!("读取缓存文件失败: {}", path.display()))?;
-        let data: CacheData =
-            serde_json::from_str(&content).context("解析缓存文件失败，格式可能已损坏")?;
+        let content = fs::read_to_string(&path)
+            .with_context(|| format!("读取缓存文件失败: {}", path.display()))?;
+        let data: CacheData = serde_json::from_str(&content)
+            .with_context(|| {
+                format!(
+                    "解析缓存文件失败，格式可能已损坏: {}\n  请手动删除该文件后重试: rm '{}'",
+                    path.display(),
+                    path.display(),
+                )
+            })?;
         Ok(data.names.into_iter().collect())
     }
 
@@ -86,6 +96,12 @@ impl RepoCache {
             }
         }
         (old, new)
+    }
+}
+
+impl Default for RepoCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

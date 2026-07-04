@@ -8,7 +8,18 @@ use std::process::Command;
 pub struct Keychain;
 
 impl Keychain {
+    /// 读取凭证：优先环境变量，降级到 macOS Keychain
+    ///
+    /// 环境变量名与 service 名一致（如 `FEISHU_APP_ID`），便于 Linux/Docker 等无 Keychain 环境。
     fn read_entry(service: &str) -> Result<String> {
+        // 优先从环境变量读取
+        if let Ok(val) = std::env::var(service) {
+            let trimmed = val.trim().to_string();
+            if !trimmed.is_empty() {
+                return Ok(trimmed);
+            }
+        }
+
         let user = std::env::var("USER").unwrap_or_default();
         let output = Command::new("security")
             .args(["find-generic-password", "-a", &user, "-s", service, "-w"])

@@ -21,13 +21,13 @@ pub fn parse_star_count(s: &str) -> Option<u64> {
     let lower = s.to_lowercase();
     if lower.ends_with('k') {
         let num: f64 = lower[..lower.len() - 1].trim().parse().ok()?;
-        Some((num * 1000.0) as u64)
+        Some((num * 1000.0).round() as u64)
     } else if lower.ends_with('m') {
         let num: f64 = lower[..lower.len() - 1].trim().parse().ok()?;
-        Some((num * 1_000_000.0) as u64)
+        Some((num * 1_000_000.0).round() as u64)
     } else if lower.ends_with('b') {
         let num: f64 = lower[..lower.len() - 1].trim().parse().ok()?;
-        Some((num * 1_000_000_000.0) as u64)
+        Some((num * 1_000_000_000.0).round() as u64)
     } else {
         lower.parse::<u64>().ok()
     }

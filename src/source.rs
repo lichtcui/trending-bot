@@ -3,45 +3,83 @@ use scraper::{Html, Selector};
 
 use crate::repo::{parse_star_count, Repo};
 
+/// 预编译的 CSS 选择器，避免每行重复编译
+struct TrendingSelectors {
+    link: Selector,
+    description: Selector,
+    language: Selector,
+    star_total: Selector,
+    star_today: Selector,
+}
+
+impl TrendingSelectors {
+    fn new() -> Result<Self> {
+        Ok(TrendingSelectors {
+            link: Selector::parse("h2.h3.lh-condensed a")
+                .map_err(|e| anyhow::anyhow!("CSS 选择器解析失败: {}", e))?,
+            description: Selector::parse("p.col-9.color-fg-muted")
+                .map_err(|e| anyhow::anyhow!("CSS 选择器解析失败: {}", e))?,
+            language: Selector::parse("span[itemprop='programmingLanguage']")
+                .map_err(|e| anyhow::anyhow!("CSS 选择器解析失败: {}", e))?,
+            star_total: Selector::parse("a[href$='/stargazers']")
+                .map_err(|e| anyhow::anyhow!("CSS 选择器解析失败: {}", e))?,
+            star_today: Selector::parse("span.d-inline-block.float-sm-right")
+                .map_err(|e| anyhow::anyhow!("CSS 选择器解析失败: {}", e))?,
+        })
+    }
+}
+
 /// 数据源 trait — 为今后扩展其他来源（如 GitHub API）做准备
 pub trait TrendingSource {
     fn fetch_trending(&self, count: usize) -> Result<Vec<Repo>>;
 }
 
 /// GitHub Trending 页面抓取器
-pub struct GitHubTrending;
+pub struct GitHubTrending {
+    client: reqwest::blocking::Client,
+}
 
 impl GitHubTrending {
-    /// 从单个 HTML 行元素中解析 Repo
-    fn parse_repo(row: &scraper::ElementRef) -> Option<Repo> {
-        // 选择器（一次解析，复用）
-        let link_sel = Selector::parse("h2.h3.lh-condensed a").ok()?;
-        let desc_sel = Selector::parse("p.col-9.color-fg-muted").ok()?;
-        let lang_sel = Selector::parse("span[itemprop='programmingLanguage']").ok()?;
-        let star_total_sel = Selector::parse("a[href$='/stargazers']").ok()?;
-        let star_today_sel = Selector::parse("span.d-inline-block.float-sm-right").ok()?;
+    /// 创建抓取器（使用默认 HTTP Client）
+    pub fn new() -> Self {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent("Mozilla/5.0 (compatible; trending-bot/0.1.0)")
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .expect("创建 HTTP 客户端失败");
+        GitHubTrending { client }
+    }
 
+    /// 使用自定义 HTTP Client 创建抓取器（方便测试时注入 mock Client）
+    #[allow(dead_code)]
+    pub fn with_client(client: reqwest::blocking::Client) -> Self {
+        GitHubTrending { client }
+    }
+
+    /// 从单个 HTML 行元素中解析 Repo
+    ///
+    /// `selectors` 由 `parse_from_html` 预先编译好并传入，避免每行重复编译。
+    fn parse_repo(row: &scraper::ElementRef, selectors: &TrendingSelectors) -> Option<Repo> {
         // --- 名称 + URL ---
-        let link = row.select(&link_sel).next()?;
+        let link = row.select(&selectors.link).next()?;
         let href = link.value().attr("href")?;
         let name = href
             .trim_start_matches('/')
             .split('/')
             .collect::<Vec<_>>()
             .join("/");
-        // 取 text 节点内容，忽略内部 strong 等子元素干扰
         let url = format!("https://github.com{}", href);
 
         // --- 描述 ---
         let description = row
-            .select(&desc_sel)
+            .select(&selectors.description)
             .next()
             .map(|e| e.text().collect::<String>().trim().to_string())
             .filter(|s| !s.is_empty());
 
         // --- 编程语言 ---
         let language = row
-            .select(&lang_sel)
+            .select(&selectors.language)
             .next()
             .map(|e| e.text().collect::<String>().trim().to_string())
             .filter(|s| !s.is_empty());
@@ -49,7 +87,7 @@ impl GitHubTrending {
         // --- 总 Star 数 ---
         // 从 stargazers 链接的文本中提取（跳过 SVG 图标文本）
         let stars_total = row
-            .select(&star_total_sel)
+            .select(&selectors.star_total)
             .next()
             .and_then(|e| {
                 let text: String = e.text().collect();
@@ -62,12 +100,12 @@ impl GitHubTrending {
         // --- 今日 Star 数 ---
         // 文本形如 "2,804 stars today" → 提取第一个数字
         let stars_today = row
-            .select(&star_today_sel)
+            .select(&selectors.star_today)
             .next()
             .and_then(|e| {
                 let text = e.text().collect::<String>();
                 text.split_whitespace()
-                    .find(|s| s.chars().next().map_or(false, |c| c.is_ascii_digit()))
+                    .find(|s| s.chars().next().is_some_and(|c| c.is_ascii_digit()))
                     .and_then(|n| n.replace(',', "").parse::<u64>().ok())
             })
             .unwrap_or(0);
@@ -83,16 +121,17 @@ impl GitHubTrending {
     }
 }
 
+impl Default for GitHubTrending {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrendingSource for GitHubTrending {
     fn fetch_trending(&self, count: usize) -> Result<Vec<Repo>> {
         let url = "https://github.com/trending?since=daily";
-        let client = reqwest::blocking::Client::builder()
-            .user_agent("Mozilla/5.0 (compatible; trending-bot/0.1.0)")
-            .timeout(std::time::Duration::from_secs(15))
-            .build()
-            .context("创建 HTTP 客户端失败")?;
-
-        let html = client
+        let html = self
+            .client
             .get(url)
             .send()
             .context("请求 GitHub Trending 页面失败")?
@@ -103,15 +142,18 @@ impl TrendingSource for GitHubTrending {
     }
 }
 
-/// 从 HTML 文本中解析 Trending 项目列表（暴露为 pub 方便测试）
-pub fn parse_from_html(html: &str, count: usize) -> Result<Vec<Repo>> {
+/// 从 HTML 文本中解析 Trending 项目列表
+pub(crate) fn parse_from_html(html: &str, count: usize) -> Result<Vec<Repo>> {
     let doc = Html::parse_document(html);
     let row_sel =
         Selector::parse("article.Box-row").map_err(|e| anyhow::anyhow!("CSS 选择器解析失败: {}", e))?;
 
+    // 编译所有 CSS 选择器一次，在所有行中复用
+    let selectors = TrendingSelectors::new()?;
+
     let repos: Vec<Repo> = doc
         .select(&row_sel)
-        .filter_map(|row| GitHubTrending::parse_repo(&row))
+        .filter_map(|row| GitHubTrending::parse_repo(&row, &selectors))
         .take(count)
         .collect();
 
@@ -276,6 +318,17 @@ mod tests {
 
         let repos = parse_from_html(&html, 3).unwrap();
         assert_eq!(repos.len(), 3);
+    }
+
+    #[test]
+    fn test_with_client_constructor() {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(1))
+            .build()
+            .unwrap();
+        let gh = GitHubTrending::with_client(client);
+        // 不发起请求，仅验证构造成功
+        let _ = gh;
     }
 
     #[test]

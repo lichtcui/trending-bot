@@ -15,7 +15,7 @@ pub struct FeishuAppNotifier {
 }
 
 impl FeishuAppNotifier {
-    /// 创建飞书应用推送器
+    /// 创建飞书应用推送器（使用默认 HTTP Client）
     ///
     /// - `app_id`: 飞书企业自建应用的 App ID
     /// - `app_secret`: 飞书企业自建应用的 App Secret
@@ -25,6 +25,16 @@ impl FeishuAppNotifier {
             .timeout(std::time::Duration::from_secs(10))
             .build()
             .expect("创建 HTTP 客户端失败");
+        Self::with_client(client, app_id, app_secret, open_id)
+    }
+
+    /// 使用自定义 HTTP Client 创建推送器（方便测试时注入 mock Client）
+    pub fn with_client(
+        client: reqwest::blocking::Client,
+        app_id: &str,
+        app_secret: &str,
+        open_id: &str,
+    ) -> Self {
         FeishuAppNotifier {
             app_id: app_id.to_string(),
             app_secret: app_secret.to_string(),
@@ -100,6 +110,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "需要真实的飞书 API 网络请求，适合手动验证"]
     fn test_send_with_invalid_credentials() {
         let notifier = FeishuAppNotifier::new("invalid", "invalid", "ou_test");
         let payload = serde_json::json!({"msg_type": "text", "content": {"text": "test"}});

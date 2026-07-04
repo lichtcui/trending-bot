@@ -17,8 +17,8 @@ use cache::RepoCache;
 fn main() -> Result<()> {
     // 简单的 CLI 参数解析（避免引入 clap 依赖）
     let args: Vec<String> = std::env::args().collect();
-    let json_mode = args.contains(&"--json".to_string());
-    let dry_run = args.contains(&"--dry-run".to_string());
+    let json_mode = args.iter().any(|a| a == "--json");
+    let dry_run = args.iter().any(|a| a == "--dry-run");
 
     // 解析 --count N 或 -c N
     let count: usize = args.windows(2)
@@ -35,7 +35,7 @@ fn main() -> Result<()> {
         .unwrap_or_default();
 
     // 1. 获取 Trending 项目
-    let source = GitHubTrending;
+    let source = GitHubTrending::new();
     let repos = source
         .fetch_trending(count)
         .context("获取 GitHub Trending 失败")?;
@@ -51,11 +51,9 @@ fn main() -> Result<()> {
     };
 
     let (old, new) = cache.diff(&repos, &last_names);
-    let new_owned: Vec<repo::Repo> = new.clone().into_iter().cloned().collect();
-    let new_names: Vec<String> = new.iter().map(|r| r.name.clone()).collect();
 
-    let all_new = old.is_empty() && !new_owned.is_empty();
-    let has_new = !new_owned.is_empty();
+    let has_new = !new.is_empty();
+    let all_new = old.is_empty() && has_new;
     let all_old = old.len() == repos.len() && !repos.is_empty();
 
     // 3. 飞书推送（除非 dry-run）
@@ -71,6 +69,8 @@ fn main() -> Result<()> {
         let card = if all_new {
             format::format_card(&repos, CardVariant::Full)
         } else if has_new {
+            // 只在真正需要时克隆 new_owned（避免 --dry-run 或 all_new 时浪费）
+            let new_owned: Vec<_> = new.iter().map(|r| (*r).clone()).collect();
             format::format_card(&new_owned, CardVariant::Partial)
         } else {
             format::format_card(&[], CardVariant::Stale)
@@ -79,10 +79,8 @@ fn main() -> Result<()> {
         let notifier = FeishuAppNotifier::new(&app_id, &app_secret, &open_id);
         notifier.send(&card)?;
 
-        // 更新缓存（除非全部重复）
-        if all_old {
-            // 全部重复，不更新
-        } else {
+        // 有新增项目时才更新缓存（全部重复则跳过）
+        if !all_old {
             if let Err(e) = cache.save_current_names(&repos) {
                 eprintln!("⚠️ 更新缓存失败: {}", e);
             }
@@ -91,6 +89,8 @@ fn main() -> Result<()> {
 
     // 4. JSON 输出（AI 调用模式）
     if json_mode {
+        // 只在 JSON 模式需要时分配 new_names
+        let new_names: Vec<_> = new.iter().map(|r| r.name.clone()).collect();
         let ai_output = output::AiOutput::new(&repos, old.len(), &new_names, !dry_run);
         let json = serde_json::to_string_pretty(&ai_output)
             .context("序列化 JSON 输出失败")?;
