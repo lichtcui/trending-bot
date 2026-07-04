@@ -10,7 +10,6 @@ pub struct AiOutput {
     pub count: usize,
     pub repos: Vec<Repo>,
     pub cache: CacheContext,
-    pub feishu_pushed: bool,
 }
 
 /// 缓存对比上下文
@@ -25,7 +24,7 @@ pub struct CacheContext {
 }
 
 impl AiOutput {
-    pub fn new(repos: &[Repo], old_count: usize, new_repos: &[String], feishu_pushed: bool) -> Self {
+    pub fn new(repos: &[Repo], old_count: usize, new_repos: &[String]) -> Self {
         let (status, is_duplicate) = if old_count == 0 && !new_repos.is_empty() {
             ("all_new".to_string(), false)
         } else if !new_repos.is_empty() {
@@ -47,7 +46,6 @@ impl AiOutput {
                 new_repos: new_repos.to_vec(),
                 is_duplicate,
             },
-            feishu_pushed,
         }
     }
 }

@@ -2,7 +2,7 @@
 name = "trending-bot"
 version = "0.1.0"
 edition = "2021"
-description = "GitHub Trending scraper + Feishu bot notifier"
+description = "GitHub Trending scraper with JSON output"
 
 [dependencies]
 reqwest = { version = "0.13", features = ["blocking", "json"] }
