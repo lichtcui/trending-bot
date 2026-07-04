@@ -55,7 +55,6 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
         let url = item.get("url")?.as_str()?.to_string();
         let score = item.get("score").and_then(|v| v.as_u64());
         let author = item.get("submitter_user")
-            .and_then(|u| u.get("username"))
             .and_then(|v| v.as_str())
             .map(String::from);
         let description = item.get("description")
@@ -91,7 +90,7 @@ mod tests {
             "title": "A Lobsters Story",
             "url": "https://example.com/article",
             "score": 85,
-            "submitter_user": { "username": "lobster_user" },
+            "submitter_user": "lobster_user",
             "comment_count": 15,
             "comments_url": "https://lobste.rs/s/abc123",
             "tags": ["rust"],
@@ -116,6 +115,8 @@ mod tests {
         }]);
         let items = parse_stories(json.as_array().unwrap(), "lobsters");
         assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "story_def456");
+        assert_eq!(items[0].title, "Minimal Post");
         assert!(items[0].author.is_none());
         assert!(items[0].description.is_none());
         assert!(items[0].comments_url.is_none());
@@ -125,5 +126,68 @@ mod tests {
     fn test_parse_lobsters_empty() {
         let items = parse_stories(&[], "lobsters");
         assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_parse_lobsters_reality_format() {
+        // Real Lobsters /hottest.json: submitter_user is a plain string, not an object
+        // description can be empty or HTML, url can be empty for self-posts
+        let json = serde_json::json!([{
+            "short_id": "real1",
+            "title": "Real Lobsters Story",
+            "url": "https://example.com/real",
+            "score": 99,
+            "submitter_user": "real_user",
+            "description": "<p>A real story with HTML</p>",
+            "comments_url": "https://lobste.rs/s/real1"
+        }]);
+        let items = parse_stories(json.as_array().unwrap(), "lobsters");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].source, "lobsters");
+        assert_eq!(items[0].id, "story_real1");
+        assert_eq!(items[0].author.as_deref(), Some("real_user"));
+        assert_eq!(items[0].score, Some(99));
+        assert!(items[0].description.is_some());
+    }
+
+    #[test]
+    fn test_parse_lobsters_self_post() {
+        // Self-posts on Lobsters have empty url
+        let json = serde_json::json!([{
+            "short_id": "self1",
+            "title": "Ask Lobsters: Something",
+            "url": "",
+            "score": 5,
+            "submitter_user": "asker"
+        }]);
+        let items = parse_stories(json.as_array().unwrap(), "lobsters");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].url, "");
+        assert_eq!(items[0].author.as_deref(), Some("asker"));
+    }
+
+    #[test]
+    fn test_parse_lobsters_missing_required_field() {
+        // Items missing short_id or title should be filtered out
+        let json = serde_json::json!([
+            {
+                "short_id": "ok1",
+                "title": "Valid Story",
+                "url": "https://example.com/ok"
+            },
+            {
+                // missing short_id
+                "title": "No Short ID",
+                "url": "https://example.com/no-id"
+            },
+            {
+                "short_id": "no-title",
+                // missing title
+                "url": "https://example.com/no-title"
+            }
+        ]);
+        let items = parse_stories(json.as_array().unwrap(), "lobsters");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, "story_ok1");
     }
 }
