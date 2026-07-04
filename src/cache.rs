@@ -221,7 +221,6 @@ mod tests {
             url: url.to_string(),
             description: None,
             score: None,
-            comments_url: None,
             external_content: None,
         }
     }
@@ -251,7 +250,6 @@ mod tests {
             url: r.url.clone(),
             description: None,
             score: None,
-            comments_url: None,
             external_content: None,
         }).collect();
         let (old, new) = cache.diff_multi(&items, &last);
@@ -272,7 +270,6 @@ mod tests {
             url: r.url.clone(),
             description: None,
             score: None,
-            comments_url: None,
             external_content: None,
         }).collect();
         let (old, new) = cache.diff_multi(&items, &last);
@@ -293,7 +290,6 @@ mod tests {
             url: r.url.clone(),
             description: None,
             score: None,
-            comments_url: None,
             external_content: None,
         }).collect();
         let (old, new) = cache.diff_multi(&items, &last);
@@ -411,7 +407,6 @@ mod tests {
             url: "https://github.com/rust-lang/rust".into(),
             description: None,
             score: None,
-            comments_url: None,
             external_content: Some(content),
         }];
         cache.save_from_items(&items).unwrap();

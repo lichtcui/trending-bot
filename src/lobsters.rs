@@ -58,10 +58,6 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
             .and_then(|v| v.as_str())
             .map(String::from)
             .filter(|s| !s.is_empty());
-        let comments_url = item.get("comments_url")
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
         Some(TrendingItem {
             source: source.to_string(),
             id: format!("story_{}", short_id),
@@ -69,7 +65,6 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
             url,
             description,
             score,
-            comments_url,
             external_content: None,
         })
     }).collect()
@@ -100,6 +95,7 @@ mod tests {
         assert_eq!(items[0].description.as_deref(), Some("A great article about Rust"));
     }
 
+
     #[test]
     fn test_parse_lobsters_minimal() {
         let json = serde_json::json!([{
@@ -113,7 +109,6 @@ mod tests {
         assert_eq!(items[0].id, "story_def456");
         assert_eq!(items[0].title, "Minimal Post");
         assert!(items[0].description.is_none());
-        assert!(items[0].comments_url.is_none());
     }
 
     #[test]
@@ -132,8 +127,7 @@ mod tests {
             "url": "https://example.com/real",
             "score": 99,
             "submitter_user": "real_user",
-            "description": "<p>A real story with HTML</p>",
-            "comments_url": "https://lobste.rs/s/real1"
+            "description": "<p>A real story with HTML</p>"
         }]);
         let items = parse_stories(json.as_array().unwrap(), "lobsters");
         assert_eq!(items.len(), 1);

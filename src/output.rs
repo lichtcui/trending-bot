@@ -84,7 +84,6 @@ mod tests {
             url: "https://example.com".into(),
             description: None,
             score: None,
-            comments_url: None,
             external_content: None,
         }
     }

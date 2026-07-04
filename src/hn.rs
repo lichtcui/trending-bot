@@ -80,11 +80,6 @@ fn parse_story(data: &serde_json::Value) -> Option<TrendingItem> {
         return None; // 过滤无外部链接的条目（如某些文本帖）
     }
     let score = data.get("score").and_then(|v| v.as_u64());
-    let descendants = data.get("descendants").and_then(|v| v.as_u64());
-    let comments_url = descendants.map(|_| {
-        format!("https://news.ycombinator.com/item?id={}", id)
-    });
-
     Some(TrendingItem {
         source: "hacker_news".to_string(),
         id: format!("story_{}", id),
@@ -92,7 +87,6 @@ fn parse_story(data: &serde_json::Value) -> Option<TrendingItem> {
         url,
         description: None,
         score,
-        comments_url,
         external_content: None,
     })
 }
@@ -118,7 +112,6 @@ mod tests {
         assert_eq!(item.title, "Test Story");
         assert_eq!(item.url, "https://example.com/1");
         assert_eq!(item.score, Some(150));
-        assert_eq!(item.comments_url.as_deref(), Some("https://news.ycombinator.com/item?id=42424242"));
     }
 
     #[test]
@@ -144,16 +137,5 @@ mod tests {
         assert!(parse_story(&json).is_none());
     }
 
-    #[test]
-    fn test_parse_story_no_comments() {
-        let json = serde_json::json!({
-            "id": 42424245,
-            "title": "No Comments",
-            "url": "https://example.com/2",
-            "score": 5,
-            "type": "story"
-        });
-        let item = parse_story(&json).unwrap();
-        assert!(item.comments_url.is_none());
-    }
+
 }
