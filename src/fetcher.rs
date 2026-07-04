@@ -42,6 +42,10 @@ impl ContentFetcher {
             .send()
             .ok()?;
 
+        if !resp.status().is_success() {
+            return None;
+        }
+
         let text = resp.text().ok()?;
         let truncated = truncate_text(&text, 5000);
         let word_count = truncated.split_whitespace().count();
