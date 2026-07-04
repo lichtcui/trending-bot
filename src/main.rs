@@ -7,16 +7,21 @@ mod output;
 mod repo;
 mod source;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result};
-use source::{GitHubTrending, TrendingSource};
+
+use cache::RepoCache;
+use item::TrendingItem;
+use output::{AiOutput, SourceDiff};
+use source::TrendingSource;
 
 fn main() -> Result<()> {
-    // 简单的 CLI 参数解析（避免引入 clap 依赖）
+    // 简单的 CLI 参数解析
     let args: Vec<String> = std::env::args().collect();
     let json_mode = args.iter().any(|a| a == "--json");
     let dry_run = args.iter().any(|a| a == "--dry-run");
+    let fetch_content = !args.iter().any(|a| a == "--no-content");
 
     // 解析 --count N 或 -c N
     let count: usize = args.windows(2)
@@ -24,49 +29,145 @@ fn main() -> Result<()> {
         .and_then(|w| w[1].parse().ok())
         .unwrap_or(5);
 
-    // 1. 获取 Trending 项目
-    let source = GitHubTrending::new();
-    let items = source
-        .fetch(count)
-        .context("获取 GitHub Trending 失败")?;
-    let items: Vec<crate::item::TrendingItem> = items;
-
-    // 2. 加载缓存，对比新旧
-    let cache = cache::RepoCache::new();
-    let last_names: HashSet<String> = match cache.load_last_names() {
-        Ok(names) => names,
-        Err(e) => {
-            eprintln!("⚠️ 读取缓存失败，跳过: {}", e);
-            HashSet::new()
+    // 解析 --source / -s（默认全部）
+    let enabled_sources: Vec<String> = {
+        let specified: Vec<String> = args.windows(2)
+            .filter(|w| w[0] == "--source" || w[0] == "-s")
+            .map(|w| w[1].to_lowercase())
+            .collect();
+        if specified.is_empty() {
+            vec!["github".into(), "hn".into(), "lobsters".into()]
+        } else {
+            specified
         }
     };
 
-    // 临时适配：只保留 repo name 用于缓存对比
-    let repos: Vec<crate::repo::Repo> = items.iter().map(|i| {
-        crate::repo::Repo {
-            name: i.id.clone(),
-            url: i.url.clone(),
-            description: i.description.clone(),
-            language: None,
-            stars_total: 0,
-            stars_today: i.score.unwrap_or(0),
+    // 1. 初始化各 Source
+    let mut sources: Vec<Box<dyn TrendingSource>> = Vec::new();
+    for name in &enabled_sources {
+        match name.as_str() {
+            "github" => sources.push(Box::new(source::GitHubTrending::new())),
+            "hn" => sources.push(Box::new(hn::HackerNews::new())),
+            "lobsters" => sources.push(Box::new(lobsters::Lobsters::new())),
+            _ => eprintln!("⚠️ 未知数据源: {}，跳过", name),
         }
-    }).collect();
-
-    let (old, new) = cache.diff(&repos, &last_names);
-
-    // 3. JSON 输出（AI 调用模式）
-    if json_mode {
-        let new_names: Vec<_> = new.iter().map(|r| r.name.clone()).collect();
-        let ai_output = output::AiOutput::new(&repos, old.len(), &new_names);
-        let json = serde_json::to_string_pretty(&ai_output)
-            .context("序列化 JSON 输出失败")?;
-        println!("{}", json);
     }
 
-    // 4. 更新缓存
-    if !dry_run && !repos.is_empty() {
-        if let Err(e) = cache.save_current_names(&repos) {
+    // 2. 顺序获取各源数据
+    let mut all_items: Vec<TrendingItem> = Vec::new();
+    for source in &sources {
+        match source.fetch(count) {
+            Ok(mut items) => {
+                eprintln!("✓ {} 获取到 {} 条", source.source_name(), items.len());
+                all_items.append(&mut items);
+            }
+            Err(e) => {
+                eprintln!("⚠️ {} 获取失败: {}", source.source_name(), e);
+            }
+        }
+    }
+
+    // 3. 缓存对比
+    let cache = RepoCache::new();
+    let last_data: HashMap<String, HashSet<String>> = match cache.load_all() {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("⚠️ 读取缓存失败，跳过: {}", e);
+            HashMap::new()
+        }
+    };
+
+    // 仅提取新项目的 ID（不持有引用，避免 borrow checker 冲突）
+    let new_item_ids: HashSet<String> = {
+        all_items.iter()
+            .filter(|item| {
+                let source_last = last_data.get(&item.source);
+                source_last.map_or(true, |ids| !ids.contains(&item.id))
+            })
+            .map(|item| item.id.clone())
+            .collect()
+    };
+
+    // 4. 内容抓取（仅对新项目）
+    let mut fetched_content = 0usize;
+    let mut cached_content = 0usize;
+    let mut failed_content = 0usize;
+
+    if fetch_content {
+        let fetcher = fetcher::ContentFetcher::new();
+        let cached_urls: HashSet<String> = cache.load_content_hashes()
+            .unwrap_or_default()
+            .keys()
+            .cloned()
+            .collect();
+
+        for item in &mut all_items {
+            if new_item_ids.contains(&item.id) {
+                if cached_urls.contains(&item.url) {
+                    cached_content += 1;
+                    continue;
+                }
+                match fetcher.fetch(item) {
+                    Some(content) => {
+                        item.external_content = Some(content);
+                        fetched_content += 1;
+                    }
+                    None => {
+                        failed_content += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. 统计各源 & 构建输出引用
+    let mut by_source: HashMap<String, SourceDiff> = HashMap::new();
+    let new_refs: Vec<&TrendingItem> = all_items.iter()
+        .filter(|item| new_item_ids.contains(&item.id))
+        .collect();
+    let old_refs: Vec<&TrendingItem> = all_items.iter()
+        .filter(|item| !new_item_ids.contains(&item.id))
+        .collect();
+
+    for item in &all_items {
+        let entry = by_source.entry(item.source.clone()).or_insert(SourceDiff { new: 0, old: 0 });
+        if new_item_ids.contains(&item.id) {
+            entry.new += 1;
+        } else {
+            entry.old += 1;
+        }
+    }
+
+    // 6. JSON 输出
+    if json_mode {
+        let output = AiOutput::new(
+            &all_items,
+            &new_refs,
+            &old_refs,
+            fetched_content,
+            cached_content,
+            failed_content,
+            &by_source,
+        );
+        let json = serde_json::to_string_pretty(&output)
+            .context("序列化 JSON 输出失败")?;
+        println!("{}", json);
+    } else {
+        // 非 JSON 模式：简要输出
+        println!("=== 多源热点汇总 ===");
+        for item in &all_items {
+            let tag = if new_item_ids.contains(&item.id) { "NEW" } else { "   " };
+            println!("[{}] [{}] {} - {}", tag, item.source, item.title, item.url);
+        }
+        println!("\n缓存: {} 新 / {} 旧", new_refs.len(), old_refs.len());
+        if fetch_content {
+            println!("内容: {} 新抓取 / {} 缓存命中 / {} 失败", fetched_content, cached_content, failed_content);
+        }
+    }
+
+    // 7. 更新缓存
+    if !dry_run && !all_items.is_empty() {
+        if let Err(e) = cache.save_from_items(&all_items) {
             eprintln!("⚠️ 更新缓存失败: {}", e);
         }
     }
