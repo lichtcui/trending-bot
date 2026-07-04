@@ -1,6 +1,7 @@
 mod cache;
 mod hn;
 mod item;
+mod lobsters;
 mod output;
 mod repo;
 mod source;
