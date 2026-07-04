@@ -219,7 +219,6 @@ mod tests {
             id: id.to_string(),
             title: "test".into(),
             url: url.to_string(),
-            description: None,
             score: None,
             external_content: None,
         }
@@ -248,7 +247,6 @@ mod tests {
             id: r.name.clone(),
             title: r.name.clone(),
             url: r.url.clone(),
-            description: None,
             score: None,
             external_content: None,
         }).collect();
@@ -268,7 +266,6 @@ mod tests {
             id: r.name.clone(),
             title: r.name.clone(),
             url: r.url.clone(),
-            description: None,
             score: None,
             external_content: None,
         }).collect();
@@ -288,7 +285,6 @@ mod tests {
             id: r.name.clone(),
             title: r.name.clone(),
             url: r.url.clone(),
-            description: None,
             score: None,
             external_content: None,
         }).collect();
@@ -405,7 +401,6 @@ mod tests {
             id: "rust-lang/rust".into(),
             title: "rust".into(),
             url: "https://github.com/rust-lang/rust".into(),
-            description: None,
             score: None,
             external_content: Some(content),
         }];

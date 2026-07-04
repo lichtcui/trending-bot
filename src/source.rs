@@ -188,7 +188,6 @@ pub(crate) fn repos_to_items(repos: &[Repo], source_name: &str) -> Vec<TrendingI
             id,
             title: r.name.clone(),
             url: r.url.clone(),
-            description: r.description.clone(),
             score,
             external_content: None,
         }
@@ -379,7 +378,6 @@ mod tests {
         assert_eq!(items[0].id, "rust-lang/rust");
         assert_eq!(items[0].title, "rust-lang/rust");
         assert_eq!(items[0].url, "https://github.com/rust-lang/rust");
-        assert_eq!(items[0].description.as_deref(), Some("A safe language."));
         assert_eq!(items[0].score, Some(500));
         assert!(items[0].external_content.is_none());
     }
@@ -400,7 +398,6 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].source, "github_trending");
         assert_eq!(items[0].id, "owner/repo");
-        assert_eq!(items[0].description, None);
         assert_eq!(items[0].score, None);
         assert!(items[0].external_content.is_none());
     }

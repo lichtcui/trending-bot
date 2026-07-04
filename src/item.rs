@@ -7,7 +7,6 @@ pub struct TrendingItem {
     pub id: String,
     pub title: String,
     pub url: String,
-    pub description: Option<String>,
     pub score: Option<u64>,
     pub external_content: Option<ExternalContent>,
 }
@@ -39,7 +38,6 @@ mod tests {
             id: "story_12345".into(),
             title: "Test Story".into(),
             url: "https://example.com".into(),
-            description: Some("A test story".into()),
             score: Some(100),
             external_content: None,
         };
@@ -83,7 +81,6 @@ mod tests {
             id: "story_4242".into(),
             title: "Rust is great".into(),
             url: "https://github.com/rust-lang/rust".into(),
-            description: None,
             score: None,
             external_content: Some(content),
         };

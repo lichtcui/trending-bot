@@ -82,7 +82,6 @@ mod tests {
             id: id.to_string(),
             title: "test".into(),
             url: "https://example.com".into(),
-            description: None,
             score: None,
             external_content: None,
         }

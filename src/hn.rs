@@ -85,7 +85,6 @@ fn parse_story(data: &serde_json::Value) -> Option<TrendingItem> {
         id: format!("story_{}", id),
         title,
         url,
-        description: None,
         score,
         external_content: None,
     })

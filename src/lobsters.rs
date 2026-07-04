@@ -54,16 +54,11 @@ fn parse_stories(data: &[serde_json::Value], source: &str) -> Vec<TrendingItem> 
         let title = item.get("title")?.as_str()?.to_string();
         let url = item.get("url")?.as_str()?.to_string();
         let score = item.get("score").and_then(|v| v.as_u64());
-        let description = item.get("description")
-            .and_then(|v| v.as_str())
-            .map(String::from)
-            .filter(|s| !s.is_empty());
         Some(TrendingItem {
             source: source.to_string(),
             id: format!("story_{}", short_id),
             title,
             url,
-            description,
             score,
             external_content: None,
         })
@@ -83,16 +78,13 @@ mod tests {
             "score": 85,
             "submitter_user": "lobster_user",
             "comment_count": 15,
-            "comments_url": "https://lobste.rs/s/abc123",
-            "tags": ["rust"],
-            "description": "A great article about Rust"
+            "tags": ["rust"]
         }]);
         let items = parse_stories(json.as_array().unwrap(), "lobsters");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].source, "lobsters");
         assert_eq!(items[0].id, "story_abc123");
         assert_eq!(items[0].score, Some(85));
-        assert_eq!(items[0].description.as_deref(), Some("A great article about Rust"));
     }
 
 
@@ -108,7 +100,6 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, "story_def456");
         assert_eq!(items[0].title, "Minimal Post");
-        assert!(items[0].description.is_none());
     }
 
     #[test]
@@ -126,15 +117,13 @@ mod tests {
             "title": "Real Lobsters Story",
             "url": "https://example.com/real",
             "score": 99,
-            "submitter_user": "real_user",
-            "description": "<p>A real story with HTML</p>"
+            "submitter_user": "real_user"
         }]);
         let items = parse_stories(json.as_array().unwrap(), "lobsters");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].source, "lobsters");
         assert_eq!(items[0].id, "story_real1");
         assert_eq!(items[0].score, Some(99));
-        assert!(items[0].description.is_some());
     }
 
     #[test]
