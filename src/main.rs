@@ -33,10 +33,10 @@ fn main() -> Result<()> {
         .unwrap_or(5);
 
     // 解析 --source / -s（默认全部）
-    let enabled_sources: Vec<String> = {
+        let enabled_sources: Vec<String> = {
         let specified: Vec<String> = args.windows(2)
             .filter(|w| w[0] == "--source" || w[0] == "-s")
-            .map(|w| w[1].to_lowercase())
+            .flat_map(|w| w[1].to_lowercase().split(',').map(|s| s.to_string()).collect::<Vec<_>>())
             .collect();
         if specified.is_empty() {
             vec!["github".into(), "hn".into(), "lobsters".into()]
