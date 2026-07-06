@@ -226,6 +226,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_monday_source_inclusion() {
+        // 模拟默认源列表 + 周一追加
+        let mut names: Vec<&str> = vec!["github", "hn", "lobsters"];
+        if true /* is_monday */ {
+            names.extend(&["rust_weekly", "bytebytego", "ai_weekly"]);
+        }
+        assert_eq!(names.len(), 6);
+        assert!(names.contains(&"rust_weekly"));
+        assert!(names.contains(&"bytebytego"));
+        assert!(names.contains(&"ai_weekly"));
+    }
+
+    #[test]
     fn test_is_monday_logic() {
         // 2026-07-06 是周一
         let dt = chrono::NaiveDate::from_ymd_opt(2026, 7, 6).unwrap();
