@@ -4,3 +4,4 @@
 .DS_Store
 .pi-subagents/
 rust_out
+.worktrees/
