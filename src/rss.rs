@@ -8,6 +8,8 @@ use scraper::{Html, Selector};
 use crate::item::TrendingItem;
 
 const RUST_WEEKLY_RSS: &str = "https://this-week-in-rust.org/rss.xml";
+const BYTEBYTEGO_RSS: &str = "https://blog.bytebytego.com/feed";
+const AI_WEEKLY_RSS: &str = "https://aiweekly.co/feed";
 
 /// 获取 This Week in Rust 的最新一期，展开 HTML 内链为独立 TrendingItem
 pub fn fetch_rust_weekly(client: &Client, count: usize) -> Result<Vec<TrendingItem>> {
@@ -91,13 +93,60 @@ fn extract_issue_number(title: &str) -> &str {
 }
 
 /// 获取 ByteByteGo Newsletter 最新文章
-pub fn fetch_bytebytego(_client: &Client, _count: usize) -> Result<Vec<TrendingItem>> {
-    todo!()
+pub fn fetch_bytebytego(client: &Client, count: usize) -> Result<Vec<TrendingItem>> {
+    let xml = client
+        .get(BYTEBYTEGO_RSS)
+        .send()
+        .context("请求 ByteByteGo RSS 失败")?
+        .text()
+        .context("读取 ByteByteGo RSS 响应失败")?;
+    parse_generic_rss_items(&xml, "bytebytego", count)
 }
 
 /// 获取 AI Weekly 最新文章
-pub fn fetch_ai_weekly(_client: &Client, _count: usize) -> Result<Vec<TrendingItem>> {
-    todo!()
+pub fn fetch_ai_weekly(client: &Client, count: usize) -> Result<Vec<TrendingItem>> {
+    let xml = client
+        .get(AI_WEEKLY_RSS)
+        .send()
+        .context("请求 AI Weekly RSS 失败")?
+        .text()
+        .context("读取 AI Weekly RSS 响应失败")?;
+    parse_generic_rss_items(&xml, "ai_weekly", count)
+}
+
+/// 通用 RSS 条目解析：将 RSS feed 中每个 item 映射为 TrendingItem
+/// 适用于 ByteByteGo / AI Weekly 这类每个 item 就是一条独立文章的 feed
+fn parse_generic_rss_items(xml: &str, source_name: &str, count: usize) -> Result<Vec<TrendingItem>> {
+    let channel = rss::Channel::read_from(xml.as_bytes())
+        .with_context(|| format!("解析 {} RSS XML 失败", source_name))?;
+
+    let items: Vec<TrendingItem> = channel.items().iter()
+        .filter_map(|item| {
+            let title = item.title()?.to_string();
+            let url = item.link()?.to_string();
+            if url.is_empty() {
+                return None;
+            }
+            let prefix = match source_name {
+                "bytebytego" => "bbg",
+                "ai_weekly" => "aiw",
+                _ => source_name,
+            };
+            let id = format!("{}_{}", prefix, compute_url_hash(&url));
+            Some(TrendingItem {
+                source: source_name.to_string(),
+                id,
+                title,
+                url,
+                score: None,
+                external_content: None,
+                summary: None,
+            })
+        })
+        .take(count)
+        .collect();
+
+    Ok(items)
 }
 
 /// 计算 URL 的 16 位 hex hash
@@ -192,6 +241,75 @@ mod tests {
         let items = parse_rust_weekly_from_rss(xml, 10).unwrap();
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].url, "https://this-week-in-rust.org/blog/2026/01/01/post/");
+    }
+
+    #[test]
+    fn test_parse_bytebytego_rss_items() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel><title>ByteByteGo Newsletter</title>
+<item>
+<title>AI Routing: When to Save Money</title>
+<link>https://blog.bytebytego.com/p/ai-routing</link>
+<description>A deep dive into model routing...</description>
+<guid>https://blog.bytebytego.com/p/ai-routing</guid>
+</item>
+<item>
+<title>How Discord Scales</title>
+<link>https://blog.bytebytego.com/p/discord-scale</link>
+<description>Discord architecture...</description>
+<guid>https://blog.bytebytego.com/p/discord-scale</guid>
+</item>
+</channel></rss>"#;
+
+        let items = parse_generic_rss_items(xml, "bytebytego", 10).unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].source, "bytebytego");
+        assert_eq!(items[0].title, "AI Routing: When to Save Money");
+        assert_eq!(items[0].url, "https://blog.bytebytego.com/p/ai-routing");
+        assert!(items[0].id.starts_with("bbg_"));
+    }
+
+    #[test]
+    fn test_parse_ai_weekly_rss_items() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel><title>AI Weekly</title>
+<item>
+<title>Anthropic Files IPO</title>
+<link>https://aiweekly.co/issues/anthropic-files-ipo</link>
+<description>Anthropic filed S-1...</description>
+<guid>https://aiweekly.co/issues/anthropic-files-ipo</guid>
+</item>
+</channel></rss>"#;
+
+        let items = parse_generic_rss_items(xml, "ai_weekly", 10).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].source, "ai_weekly");
+        assert_eq!(items[0].title, "Anthropic Files IPO");
+        assert!(items[0].id.starts_with("aiw_"));
+    }
+
+    #[test]
+    fn test_generic_rss_empty_channel() {
+        let xml = r#"<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Empty</title></channel></rss>"#;
+        let items = parse_generic_rss_items(xml, "test_source", 10).unwrap();
+        assert!(items.is_empty());
+    }
+
+    #[test]
+    fn test_generic_rss_count_limit() {
+        let mut xml = r#"<?xml version="1.0"?>
+<rss version="2.0"><channel><title>Test</title>"#.to_string();
+        for i in 0..10 {
+            xml.push_str(&format!(
+                r#"<item><title>Article {}</title><link>https://x.com/{}</link></item>"#, i, i
+            ));
+        }
+        xml.push_str("</channel></rss>");
+        let items = parse_generic_rss_items(&xml, "test", 3).unwrap();
+        assert_eq!(items.len(), 3);
     }
 
     #[test]
