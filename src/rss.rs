@@ -6,6 +6,7 @@ use reqwest::blocking::Client;
 use scraper::{Html, Selector};
 
 use crate::item::TrendingItem;
+use crate::source::TrendingSource;
 
 const RUST_WEEKLY_RSS: &str = "https://this-week-in-rust.org/rss.xml";
 const BYTEBYTEGO_RSS: &str = "https://blog.bytebytego.com/feed";
@@ -147,6 +148,43 @@ fn parse_generic_rss_items(xml: &str, source_name: &str, count: usize) -> Result
         .collect();
 
     Ok(items)
+}
+
+/// RssSource 适配 TrendingSource trait，允许在 main.rs 中统一注册
+pub struct RssSource {
+    name: String,
+    client: Client,
+}
+
+impl RssSource {
+    pub fn new(name: &str) -> Self {
+        let client = Client::builder()
+            .user_agent("trending-bot/0.1.0")
+            .timeout(std::time::Duration::from_secs(15))
+            .build()
+            .expect("创建 HTTP 客户端失败");
+        RssSource { name: name.to_string(), client }
+    }
+}
+
+impl TrendingSource for RssSource {
+    fn source_name(&self) -> &'static str {
+        match self.name.as_str() {
+            "rust_weekly" => "rust_weekly",
+            "bytebytego" => "bytebytego",
+            "ai_weekly" => "ai_weekly",
+            _ => "unknown_rss",
+        }
+    }
+
+    fn fetch(&self, count: usize) -> Result<Vec<TrendingItem>> {
+        match self.name.as_str() {
+            "rust_weekly" => fetch_rust_weekly(&self.client, count),
+            "bytebytego" => fetch_bytebytego(&self.client, count),
+            "ai_weekly" => fetch_ai_weekly(&self.client, count),
+            _ => anyhow::bail!("未知 RSS 源: {}", self.name),
+        }
+    }
 }
 
 /// 计算 URL 的 16 位 hex hash

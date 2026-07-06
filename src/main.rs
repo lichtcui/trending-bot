@@ -44,6 +44,7 @@ fn main() -> Result<()> {
             specified
         }
     };
+    let user_specified_sources = args.windows(2).any(|w| w[0] == "--source" || w[0] == "-s");
 
     // 1. 初始化各 Source
     let mut sources: Vec<Box<dyn TrendingSource>> = Vec::new();
@@ -52,7 +53,18 @@ fn main() -> Result<()> {
             "github" => sources.push(Box::new(source::GitHubTrending::new())),
             "hn" => sources.push(Box::new(hn::HackerNews::new())),
             "lobsters" => sources.push(Box::new(lobsters::Lobsters::new())),
+            "rust_weekly" | "bytebytego" | "ai_weekly" => {
+                sources.push(Box::new(rss::RssSource::new(name)));
+            }
             _ => eprintln!("⚠️ 未知数据源: {}，跳过", name),
+        }
+    }
+
+    // 周一自动追加 Newsletter 源（仅在未手动指定 --source 时）
+    if is_monday() && !user_specified_sources {
+        eprintln!("📬 周一加餐: 追加 3 个 Newsletter 源...");
+        for name in &["rust_weekly", "bytebytego", "ai_weekly"] {
+            sources.push(Box::new(rss::RssSource::new(name)));
         }
     }
 
@@ -197,4 +209,34 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// 今天是周一吗？（ISO 标准：1=周一）
+fn is_monday() -> bool {
+    is_monday_for_date(chrono::Local::now().date_naive())
+}
+
+/// 可测试版本，接受指定日期
+fn is_monday_for_date(date: chrono::NaiveDate) -> bool {
+    date.format("%u").to_string() == "1"
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_monday_logic() {
+        // 2026-07-06 是周一
+        let dt = chrono::NaiveDate::from_ymd_opt(2026, 7, 6).unwrap();
+        assert!(is_monday_for_date(dt));
+
+        // 2026-07-07 是周二
+        let dt = chrono::NaiveDate::from_ymd_opt(2026, 7, 7).unwrap();
+        assert!(!is_monday_for_date(dt));
+
+        // 2026-07-05 是周日
+        let dt = chrono::NaiveDate::from_ymd_opt(2026, 7, 5).unwrap();
+        assert!(!is_monday_for_date(dt));
+    }
 }
