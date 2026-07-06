@@ -14,13 +14,13 @@ cargo build --release
 cargo test                          # 单元测试
 cargo test -- --ignored             # 含网络请求的集成测试
 
-# 运行
-cargo run --release -- --json       # 默认 3 源
-cargo run --release -- --json --summarize              # 带 LLM 总结
+# 运行（默认 3 源：github, hn, lobsters）
+cargo run --release -- --json                        # JSON 输出
+cargo run --release -- --json --count 10             # Top 10
+cargo run --release -- --json --summarize            # 带 LLM 总结
 cargo run --release -- --json --source rust_weekly,bytebytego,ai_weekly
 
-# 周一自动追加 3 个 RSS 源（无需 --source）
-cargo run --release -- --json       # 周一 = 6 源，非周一 = 3 源
+# 周一自动追加 3 个 RSS 源（无需 --source），非周一 = 3 源
 ```
 
 ## Important Rules
@@ -28,6 +28,7 @@ cargo run --release -- --json       # 周一 = 6 源，非周一 = 3 源
 - **周一自动追加**：`rust_weekly`、`bytebytego`、`ai_weekly` 三个 Newsletter 源仅在周一自动加载。非周一可通过 `--source` 显式指定。
 - **不跨期去重**：同一链接在不同周中视为不同条目。
 - **`--summarize`** 对无总结的旧项目也会重新调用 DeepSeek 总结。
+  需要设置环境变量 `DEEPSEEK_API_KEY` 或添加至 macOS Keychain。
 - **测试必须全部通过**才能提交。
 
 ## Project Structure
