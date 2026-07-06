@@ -9,7 +9,8 @@
 - **自动抓取** — 爬取 GitHub Trending 每日热门项目，CSS 选择器解析，支持 `k`/`m` 星数后缀
 - **增量缓存** — 本地缓存历史记录，只输出新上榜单的项目，避免重复消费
 - **AI 友好输出** — 结构化 JSON 包含缓存对比结果，AI Agent 可直接集成
-- **简洁依赖** — 仅依赖 `reqwest`、`scraper`、`serde`、`chrono`，轻量无冗余
+- **简洁依赖** — 仅依赖 `reqwest`、`scraper`、`serde`、`chrono`、`rss`，轻量无冗余
+- **周一加餐** — 周一自动追加 This Week in Rust、ByteByteGo、AI Weekly 三个 Newsletter 源，覆盖六个数据源
 - **跨平台** — Linux / macOS / Docker 均可运行
 
 ## 快速开始
@@ -63,10 +64,16 @@ cargo run --release -- --json --count 10 --dry-run
 ```
 src/
 ├── main.rs       # 入口：CLI 参数解析、编排获取→缓存→输出流程
-├── source.rs     # GitHub Trending 页面请求与 HTML 解析
-├── repo.rs       # Repo 数据结构与 Star 数解析
+├── source.rs     # TrendingSource trait + GitHubTrending 实现
+├── rss.rs        # RSS 源解析（Rust Weekly / ByteByteGo / AI Weekly）
+├── hn.rs         # HackerNews 数据源
+├── lobsters.rs   # Lobsters 数据源
+├── item.rs       # TrendingItem 统一数据模型
+├── fetcher.rs    # ContentFetcher 外部链接内容抓取
 ├── cache.rs      # 本地缓存管理器（增量对比 / 持久化）
-└── output.rs     # AI 可消费的结构化 JSON 输出
+├── output.rs     # AI 可消费的结构化 JSON 输出
+├── summary.rs    # DeepSeek LLM 总结
+└── repo.rs       # Repo 旧模型与 Star 数解析
 ```
 
 ### 数据流
