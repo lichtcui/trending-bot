@@ -5,6 +5,7 @@ mod item;
 mod lobsters;
 mod output;
 mod repo;
+mod rss;
 mod source;
 mod summary;
 
