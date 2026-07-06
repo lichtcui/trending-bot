@@ -135,20 +135,21 @@ fn main() -> Result<()> {
         }
     }
 
-    // 4.5 LLM 总结（仅对新项目且有外部内容的条目，自动分批调 API）
+    // 4.5 LLM 总结（对有外部内容但尚无总结的条目，分批调 API）
     let mut summarized_count = 0usize;
-    if do_summarize && !new_item_ids.is_empty() {
-        match summary::Summarizer::new() {
-            Ok(summarizer) => {
-                let new_count = new_item_ids.len();
-                let content_count = all_items.iter()
-                    .filter(|item| new_item_ids.contains(&item.id) && item.external_content.is_some())
-                    .count();
-                eprintln!("🤖 新项目 {} 条，其中 {} 条有外部内容，正在调用 DeepSeek 总结...", new_count, content_count);
-                summarized_count = summarizer.summarize_items(&mut all_items);
-            }
-            Err(e) => {
-                eprintln!("⚠️ 初始化总结器失败: {} (跳过总结)", e);
+    if do_summarize {
+        let unsnarized_count = all_items.iter()
+            .filter(|item| item.external_content.is_some() && item.summary.is_none())
+            .count();
+        if unsnarized_count > 0 {
+            match summary::Summarizer::new() {
+                Ok(summarizer) => {
+                    eprintln!("🤖 {} 条有外部内容待总结，正在调用 DeepSeek...", unsnarized_count);
+                    summarized_count = summarizer.summarize_items(&mut all_items);
+                }
+                Err(e) => {
+                    eprintln!("⚠️ 初始化总结器失败: {} (跳过总结)", e);
+                }
             }
         }
     }
@@ -191,6 +192,11 @@ fn main() -> Result<()> {
         for item in &all_items {
             let tag = if new_item_ids.contains(&item.id) { "NEW" } else { "   " };
             println!("[{}] [{}] {} - {}", tag, item.source, item.title, item.url);
+            if do_summarize {
+                if let Some(ref s) = item.summary {
+                    println!("      📝 {}", s);
+                }
+            }
         }
         println!("\n缓存: {} 新 / {} 旧", new_refs.len(), old_refs.len());
         if fetch_content {
