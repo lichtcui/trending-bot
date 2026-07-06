@@ -81,7 +81,13 @@ fn extract_issue_number(title: &str) -> &str {
     if title.is_empty() {
         return "0";
     }
-    title.rsplit(' ').next().unwrap_or("0")
+    let last = title.rsplit(' ').next().unwrap_or("0");
+    // 确保返回的是纯数字，否则回退到 "0"
+    if last.chars().all(|c| c.is_ascii_digit()) {
+        last
+    } else {
+        "0"
+    }
 }
 
 /// 获取 ByteByteGo Newsletter 最新文章
